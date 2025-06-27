@@ -206,8 +206,8 @@ session_start();
                             target="_blank" rel="noopener" aria-label="Suivez moi sur LinkedIn">
                             <i class="fab fa-linkedin-in fa-lg"></i>
                         </a>
-                        <a href="https://github.com/CASTELLS-Cyprien" class="social-icon" target="_blank" rel="noopener"
-                            aria-label="Suivez moi sur GitHub">
+                        <a href="https://github.com/CASTELLS-Cyprien/agendDAY" class="social-icon" target="_blank"
+                            rel="noopener" aria-label="Suivez moi sur GitHub">
                             <i class="fab fa-github fa-lg"></i>
                         </a>
                     </div>

@@ -107,7 +107,7 @@ foreach ($time_ranges as $range) {
                     $body_html .= "<p><strong>Description :</strong> " . nl2br(htmlspecialchars($event['descriptionEvent'])) . "</p>";
                 }
                 $body_html .= "</div>
-            <p><a href='https://castells-cyprien.ovh/agendDAY/calendar.php' class='cta-button' style='color: #ffffff !important; background-color: #4a90e2; text-decoration: none; padding: 12px 20px; border-radius: 4px; display: inline-block;'>Gérer vos événements</a></p>
+            <p><a href='https://castells-cyprien.ovh/agendDAY/calendar.php' class='cta-button' style='color: #ffffff !important; background-color: #485fc7; text-decoration: none; padding: 12px 20px; border-radius: 4px; display: inline-block;'>Gérer vos événements</a></p>
         </div>
     </div>
 </body>
