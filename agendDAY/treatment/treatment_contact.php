@@ -10,6 +10,7 @@ if (!function_exists('curl_init')) {
 }
 
 require_once 'email_connexion.php';
+require_once 'config.php';
 session_start();
 
 // Vil Vérifier si le formulaire a été soumis correctement
@@ -17,7 +18,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Vérifier la réponse reCAPTCHA
     if (isset($_POST['g-recaptcha-response']) && !empty($_POST['g-recaptcha-response'])) {
         $captcha = $_POST['g-recaptcha-response'];
-        $secretKey = "6LdxhW8rAAAAAMiLn5NjrXIGyDJ__0zguLWmkfBm";
+        $secretKey = SECRET_KEY;
         $url = 'https://www.google.com/recaptcha/api/siteverify';
 
         // Utiliser cURL pour la requête
@@ -107,7 +108,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         .content { padding: 20px; color: #333333; }
         .content p { margin: 10px 0; line-height: 1.6; }
         .contact-details { background-color: #f9f9f9; padding: 15px; border-radius: 4px; }
-        .contact-details p { margin: 5px 0; }
+        .contact-details p  { margin: 5px 0; }
         .cta-button { display: inline-block; padding: 12px 20px; background-color: #485fc7; color: #ffffff !important; text-decoration: none; border-radius: 4px; margin: 15px 0; border: 1px solid #485fc7; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
     </style>
 </head>
