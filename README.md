@@ -2,7 +2,7 @@
 
 agendDAY est une application web de gestion d’agenda développée dans le cadre d’un projet étudiant. Elle permet de visualiser un calendrier mensuel, de consulter les événements associés à chaque jour, et de gérer ces événements via une interface simple et responsive.
 
-🔗 Démo en ligne : [castells-cyprien.ovh/agendDAY](https://agendday.castells-cyprien.ovh/)
+🔗 Démo en ligne : [agendday.castells-cyprien.ovh](https://agendday.castells-cyprien.ovh/)
 
 ✨ Fonctionnalités
 Calendrier mensuel dynamique
