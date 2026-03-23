@@ -1,0 +1,71 @@
+Options -Indexes
+RewriteEngine On
+
+# ============================================================
+# REDIRECTIONS — Supprimer .php des URLs publiques
+# (exclut treatment/, assets/, et les fichiers système)
+# ============================================================
+
+# Rediriger index.php → /
+RewriteCond %{THE_REQUEST} \s/+index\.php[\s?] [NC]
+RewriteRule ^index\.php$ / [R=301,L]
+
+# Rediriger fichier.php → fichier SAUF pour treatment/ et assets/
+RewriteCond %{THE_REQUEST} \s/+(?!treatment/|assets/)([^.\s]+)\.php[\s?] [NC]
+RewriteRule ^(?!treatment/|assets/)([^.]+)\.php$ /$1 [R=301,L]
+
+# ============================================================
+# RÉÉCRITURE — Routes propres vers fichiers PHP
+# (seulement si le fichier n'existe pas déjà)
+# ============================================================
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+RewriteRule ^$                          index.php [L]
+RewriteRule ^connexion$                 connexion.php [L]
+RewriteRule ^inscription$               inscription.php [L]
+RewriteRule ^calendrier$                calendar.php [L]
+RewriteRule ^contact$                   contact.php [L]
+RewriteRule ^deconnexion$               logout.php [L]
+RewriteRule ^mot-de-passe-oublie$       mot_de_passe_oublier.php [L]
+RewriteRule ^mentions-legales$          mention_legales.php [L]
+RewriteRule ^politique-confidentialite$ politique_de_confidentialite.php [L]
+RewriteRule ^confirmation$              confirm.php [L]
+
+# ============================================================
+# SÉCURITÉ — Bloquer accès direct navigateur aux configs
+# (les appels POST des formulaires passent quand même)
+# ============================================================
+
+# Bloquer l'accès direct en GET aux fichiers de config uniquement
+<FilesMatch "^(config|config2|connexion_db|email_connexion)\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# En-têtes de sécurité
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# ============================================================
+# PERFORMANCES
+# ============================================================
+
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css               "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType image/png              "access plus 6 months"
+    ExpiresByType image/webp             "access plus 6 months"
+    ExpiresByType image/svg+xml          "access plus 6 months"
+    ExpiresByType image/x-icon           "access plus 1 year"
+</IfModule>
+
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/css application/javascript text/plain
+</IfModule>

@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /treatment/
+Disallow: /calendrier
+Disallow: /connexion
+Disallow: /deconnexion
+Disallow: /mot-de-passe-oublie
+Disallow: /mentions-legales
+Disallow: /politique-confidentialite
+
+Sitemap: https://agendday.castells-cyprien.ovh/sitemap.xml
