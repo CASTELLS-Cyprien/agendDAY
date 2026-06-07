@@ -4,6 +4,8 @@
   --primary-color: #485fc7;
   --primary-light: #6c7ce0;
   --primary-dark: #3a4ba5;
+  /* Valeurs RGB séparées : nécessaires pour rgba(var(--primary-rgb), alpha) */
+  --primary-rgb: 72, 95, 199;
   
   /* Couleurs secondaires */
   --secondary-color: #0d102c;
@@ -90,6 +92,9 @@
   --transition-fast: 150ms ease-in-out;
   --transition-normal: 250ms ease-in-out;
   --transition-slow: 350ms ease-in-out;
+
+  /* Focus ring */
+  --focus-ring: 0 0 0 3px rgba(72, 95, 199, 0.25);
   
   /* Z-index */
   --z-dropdown: 1000;

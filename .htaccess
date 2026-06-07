@@ -2,49 +2,40 @@ Options -Indexes
 RewriteEngine On
 
 # ============================================================
-# REDIRECTIONS — Supprimer .php des URLs publiques
-# (exclut treatment/, assets/, et les fichiers système)
+# SÉCURITÉ — Bloquer accès direct aux répertoires internes
 # ============================================================
-
-# Rediriger index.php → /
-RewriteCond %{THE_REQUEST} \s/+index\.php[\s?] [NC]
-RewriteRule ^index\.php$ / [R=301,L]
-
-# Rediriger fichier.php → fichier SAUF pour treatment/ et assets/
-RewriteCond %{THE_REQUEST} \s/+(?!treatment/|assets/)([^.\s]+)\.php[\s?] [NC]
-RewriteRule ^(?!treatment/|assets/)([^.]+)\.php$ /$1 [R=301,L]
+RewriteRule ^(app|core|config|vendor)/  - [F,L]
 
 # ============================================================
-# RÉÉCRITURE — Routes propres vers fichiers PHP
-# (seulement si le fichier n'existe pas déjà)
+# REDIRECTIONS 301 — Anciennes URLs (avant migration MVC)
 # ============================================================
-
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-
-RewriteRule ^$                          index.php [L]
-RewriteRule ^connexion$                 connexion.php [L]
-RewriteRule ^inscription$               inscription.php [L]
-RewriteRule ^calendrier$                calendar.php [L]
-RewriteRule ^contact$                   contact.php [L]
-RewriteRule ^deconnexion$               logout.php [L]
-RewriteRule ^mot-de-passe-oublie$       mot_de_passe_oublier.php [L]
-RewriteRule ^mentions-legales$          mention_legales.php [L]
-RewriteRule ^politique-confidentialite$ politique_de_confidentialite.php [L]
-RewriteRule ^confirmation$              confirm.php [L]
+RewriteRule ^connexion\.php$                    /connexion                   [R=301,L]
+RewriteRule ^inscription\.php$                  /inscription                 [R=301,L]
+RewriteRule ^calendar\.php$                     /calendrier                  [R=301,L]
+RewriteRule ^contact\.php$                      /contact                     [R=301,L]
+RewriteRule ^logout\.php$                       /deconnexion                 [R=301,L]
+RewriteRule ^confirm\.php$                      /confirmation                [R=301,L]
+RewriteRule ^mention_legales\.php$              /mentions-legales            [R=301,L]
+RewriteRule ^politique_de_confidentialite\.php$ /politique-confidentialite   [R=301,L]
+RewriteRule ^mot_de_passe_oublier\.php$         /mot-de-passe-oublie         [R=301,L]
+RewriteRule ^send_reminders\.php$               /cron/send_reminders.php     [R=301,L]
+RewriteRule ^delete_past_events\.php$           /cron/delete_past_events.php [R=301,L]
 
 # ============================================================
-# SÉCURITÉ — Bloquer accès direct navigateur aux configs
-# (les appels POST des formulaires passent quand même)
+# PASS-THROUGH — Fichiers et dossiers existants (assets, cron, etc.)
 # ============================================================
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
 
-# Bloquer l'accès direct en GET aux fichiers de config uniquement
-<FilesMatch "^(config|config2|connexion_db|email_connexion)\.php$">
-    Order allow,deny
-    Deny from all
-</FilesMatch>
+# ============================================================
+# FRONT CONTROLLER — Toutes les autres requêtes
+# ============================================================
+RewriteRule ^ index.php [L]
 
-# En-têtes de sécurité
+# ============================================================
+# EN-TÊTES DE SÉCURITÉ
+# ============================================================
 <IfModule mod_headers.c>
     Header always set X-Content-Type-Options "nosniff"
     Header always set X-Frame-Options "SAMEORIGIN"
@@ -55,7 +46,6 @@ RewriteRule ^confirmation$              confirm.php [L]
 # ============================================================
 # PERFORMANCES
 # ============================================================
-
 <IfModule mod_expires.c>
     ExpiresActive On
     ExpiresByType text/css               "access plus 1 month"

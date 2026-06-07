@@ -353,10 +353,12 @@ class CalendarApp {
         if (this.isSameDay(dayDate, this.selectedDate)) dayElement.classList.add('active');
         if (this.hasEventsOnDate(dayDate)) dayElement.classList.add('has-event');
 
-        // Accessibilité
+        // Accessibilité — on utilise dayDate (date normalisée) pour éviter months[-1] ou months[12]
+        const realMonth = dayDate.getMonth();
+        const realYear  = dayDate.getFullYear();
         const ariaLabel = this.isSameDay(dayDate, today)
-            ? `Jour ${day} ${this.months[month]} ${year}, aujourd'hui`
-            : `Jour ${day} ${this.months[month]} ${year}`;
+            ? `Jour ${day} ${this.months[realMonth]} ${realYear}, aujourd'hui`
+            : `Jour ${day} ${this.months[realMonth]} ${realYear}`;
         dayElement.setAttribute('role', 'button');
         dayElement.setAttribute('aria-label', ariaLabel);
         dayElement.setAttribute('tabindex', '0');
@@ -381,7 +383,7 @@ class CalendarApp {
     // === ÉVÉNEMENTS ===
     async loadEvents() {
         try {
-            const data = await this.fetchWithRetry('treatment/treatment_event.php');
+            const data = await this.fetchWithRetry('/api/events');
             
             if (Array.isArray(data)) {
                 this.events = data.map(event => ({
@@ -405,7 +407,7 @@ class CalendarApp {
         }
 
         try {
-            const response = await fetch('treatment/treatment_event.php', {
+            const response = await fetch('/api/events/by-date', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: `date=${dateStr}`
@@ -436,17 +438,18 @@ class CalendarApp {
                     <h3>Aucun événement</h3>
                     <p>Cliquez sur le bouton + pour ajouter un événement</p>
                 </div>`;
+            eventsList.onclick = null;
             return;
         }
 
         eventsList.innerHTML = events.map(event => {
             const description = event.descriptionEvent || '';
-            const maxLength = this.config.MAX_DESCRIPTION_LENGTH;
-            const truncated = description.length > maxLength 
-                ? description.substring(0, maxLength) + '...' 
+            const maxLength   = this.config.MAX_DESCRIPTION_LENGTH;
+            const truncated   = description.length > maxLength
+                ? description.substring(0, maxLength) + '...'
                 : description;
-            const readMore = description.length > maxLength 
-                ? `<span class="read-more" onclick="toggleDescription(this, event)" role="button" aria-expanded="false">Lire plus <i class="fas fa-chevron-down"></i></span>` 
+            const readMore = description.length > maxLength
+                ? `<button type="button" class="read-more" aria-expanded="false">Lire plus <i class="fas fa-chevron-down"></i></button>`
                 : '';
 
             return `
@@ -465,15 +468,21 @@ class CalendarApp {
                 </div>`;
         }).join('');
 
-        // Clic sur événement
-        eventsList.querySelectorAll('.event-item').forEach(item => {
-            item.addEventListener('click', (e) => {
-                if (e.target.closest('.read-more')) return;
-                const eventId = item.dataset.eventId;
-                const event = events.find(ev => ev.id == eventId);
-                if (event) this.openEditModal(event);
-            });
-        });
+        // onclick = affectation directe : remplace le handler précédent à chaque appel,
+        // contrairement à addEventListener qui accumulerait les listeners sur la liste.
+        eventsList.onclick = (e) => {
+            const readMoreBtn = e.target.closest('.read-more');
+            if (readMoreBtn) {
+                e.stopPropagation();
+                this.toggleDescription(readMoreBtn);
+                return;
+            }
+            const item = e.target.closest('.event-item');
+            if (!item) return;
+            const eventId   = item.dataset.eventId;
+            const eventData = events.find(ev => ev.id == eventId);
+            if (eventData) this.openEditModal(eventData);
+        };
     }
 
     async handleEventSubmit(e) {
@@ -482,11 +491,11 @@ class CalendarApp {
         const formData = new FormData(form);
         const isUpdate = !!formData.get('eventId');
 
-        formData.append(isUpdate ? 'updateEvent' : 'addEvent', '1');
         formData.set('date', this.formatDate(this.selectedDate));
 
         try {
-            const response = await fetch('treatment/treatment_event.php', {
+            const url = isUpdate ? '/api/events/update' : '/api/events';
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'X-Requested-With': 'XMLHttpRequest' },
                 body: formData
@@ -558,10 +567,10 @@ class CalendarApp {
         if (!confirm('Supprimer cet événement ? Cette action est irréversible.')) return;
 
         try {
-            const response = await fetch('treatment/treatment_deleteEvent.php', {
+            const response = await fetch('/api/events/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `eventID=${eventId}&deleteEvent=1`
+                body: `eventID=${eventId}`
             });
 
             const data = await response.json();
@@ -647,6 +656,23 @@ class CalendarApp {
         }, this.config.NOTIFICATION_DURATION);
     }
 
+    // === DESCRIPTION EXTENSIBLE ===
+    toggleDescription(btn) {
+        const descriptionEl = btn.previousElementSibling;
+        const isExpanded    = btn.getAttribute('aria-expanded') === 'true';
+
+        if (isExpanded) {
+            const fullText = descriptionEl.getAttribute('data-full-text');
+            descriptionEl.textContent = fullText.slice(0, this.config.MAX_DESCRIPTION_LENGTH) + '...';
+            btn.innerHTML = 'Lire plus <i class="fas fa-chevron-down"></i>';
+            btn.setAttribute('aria-expanded', 'false');
+        } else {
+            descriptionEl.textContent = descriptionEl.getAttribute('data-full-text');
+            btn.innerHTML = 'Lire moins <i class="fas fa-chevron-up"></i>';
+            btn.setAttribute('aria-expanded', 'true');
+        }
+    }
+
     // === NETTOYAGE ===
     destroy() {
         Object.values(this.debounceTimers).forEach(timer => clearTimeout(timer));
@@ -654,26 +680,9 @@ class CalendarApp {
     }
 }
 
-// === FONCTIONS GLOBALES ===
-function toggleDescription(element, event) {
-    event.stopPropagation();
-    const descriptionEl = element.previousElementSibling;
-    const isExpanded = element.getAttribute('aria-expanded') === 'true';
-
-    if (isExpanded) {
-        const fullText = descriptionEl.getAttribute('data-full-text');
-        descriptionEl.textContent = fullText.slice(0, 100) + '...';
-        element.innerHTML = 'Lire plus <i class="fas fa-chevron-down"></i>';
-        element.setAttribute('aria-expanded', 'false');
-    } else {
-        descriptionEl.textContent = descriptionEl.getAttribute('data-full-text');
-        element.innerHTML = 'Lire moins <i class="fas fa-chevron-up"></i>';
-        element.setAttribute('aria-expanded', 'true');
-    }
-}
-
 // === INITIALISATION ===
-let calendar;
 document.addEventListener('DOMContentLoaded', () => {
-    calendar = new CalendarApp();
+    const calendar = new CalendarApp();
+    // Exposition optionnelle pour le débogage en console
+    window.__calendar = calendar;
 });

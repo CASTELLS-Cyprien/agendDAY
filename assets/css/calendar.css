@@ -495,7 +495,8 @@
   font-family: var(--font-family);
 }
 
-.read-more-btn {
+/* Classe renommée de .read-more-btn → .read-more pour correspondre au template JS */
+.read-more {
   background: none;
   border: none;
   color: var(--primary-color);
@@ -504,6 +505,7 @@
   margin-top: var(--spacing-2);
   padding: 0;
   text-decoration: underline;
+  display: block;
 }
 
 .no-events {
