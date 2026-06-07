@@ -490,8 +490,14 @@ class CalendarApp {
         const form = e.target;
         const formData = new FormData(form);
         const isUpdate = !!formData.get('eventId');
+        const submitBtn = document.getElementById('submitBtn');
+        const originalLabel = isUpdate ? 'Modifier' : 'Ajouter';
 
         formData.set('date', this.formatDate(this.selectedDate));
+
+        // État de chargement — évite les double-soumissions le temps de la requête
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Envoi…';
 
         try {
             const url = isUpdate ? '/api/events/update' : '/api/events';
@@ -504,16 +510,20 @@ class CalendarApp {
             const data = await response.json();
             if (data.success) {
                 this.eventsCache.clear(); // Invalider cache
-                this.closeEventModal();
+                this.closeEventModal(); // Réinitialise aussi le bouton submit
                 this.loadEventsForDate(this.formatDate(this.selectedDate));
                 this.loadEvents();
                 this.showNotification(isUpdate ? 'Événement modifié' : 'Événement ajouté', 'success');
-            } else {
-                this.showNotification(data.error || 'Erreur', 'error');
+                return;
             }
+            this.showNotification(data.error || 'Erreur', 'error');
         } catch (error) {
             this.showNotification('Erreur de connexion', 'error');
         }
+
+        // En cas d'échec, le modal reste ouvert : on restaure le bouton
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel;
     }
 
     // === MODAL ===
@@ -527,8 +537,10 @@ class CalendarApp {
         modal.classList.remove('active');
         document.getElementById('eventForm').reset();
         document.getElementById('modalTitle').textContent = 'Ajouter un événement';
-        document.getElementById('submitBtn').textContent = 'Ajouter';
-        document.getElementById('submitBtn').name = 'addEvent';
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Ajouter';
+        submitBtn.name = 'addEvent';
         document.getElementById('eventId').value = '';
         
         const deleteBtn = document.getElementById('deleteBtn');
@@ -566,6 +578,13 @@ class CalendarApp {
     async confirmAndDelete(eventId) {
         if (!confirm('Supprimer cet événement ? Cette action est irréversible.')) return;
 
+        const deleteBtn = document.getElementById('deleteBtn');
+        const originalLabel = deleteBtn ? deleteBtn.innerHTML : '';
+        if (deleteBtn) {
+            deleteBtn.disabled = true;
+            deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Suppression…';
+        }
+
         try {
             const csrfToken = document.getElementById('csrfToken')?.value || '';
             const response = await fetch('/api/events/delete', {
@@ -577,15 +596,21 @@ class CalendarApp {
             const data = await response.json();
             if (data.success) {
                 this.eventsCache.clear();
-                this.closeEventModal();
+                this.closeEventModal(); // Retire aussi le bouton supprimer
                 this.loadEventsForDate(this.formatDate(this.selectedDate));
                 this.loadEvents();
                 this.showNotification('Événement supprimé', 'success');
-            } else {
-                this.showNotification(data.error || 'Erreur', 'error');
+                return;
             }
+            this.showNotification(data.error || 'Erreur', 'error');
         } catch (error) {
             this.showNotification('Erreur réseau', 'error');
+        }
+
+        // En cas d'échec, le modal reste ouvert : on restaure le bouton
+        if (deleteBtn) {
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = originalLabel;
         }
     }
 
@@ -612,19 +637,26 @@ class CalendarApp {
             const styles = document.createElement('style');
             styles.id = 'notification-styles';
             styles.textContent = `
-                .notification {
+                .notification-container {
                     position: fixed;
                     top: 20px;
                     right: 20px;
+                    z-index: 10000;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                    pointer-events: none;
+                }
+                .notification {
                     padding: 12px 20px;
                     border-radius: 8px;
                     color: white;
                     font-weight: 500;
-                    z-index: 10000;
                     display: flex;
                     align-items: center;
                     gap: 8px;
                     animation: slideInRight 0.3s ease-out;
+                    pointer-events: auto;
                 }
                 .notification-success { background: #10b981; }
                 .notification-error { background: #ef4444; }
@@ -635,6 +667,14 @@ class CalendarApp {
                 }
             `;
             document.head.appendChild(styles);
+        }
+
+        // Conteneur partagé : empile les notifications au lieu de les superposer
+        let container = document.querySelector('.notification-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'notification-container';
+            document.body.appendChild(container);
         }
 
         const icons = {
@@ -650,7 +690,7 @@ class CalendarApp {
             <span>${message}</span>
         `;
 
-        document.body.appendChild(notification);
+        container.appendChild(notification);
         setTimeout(() => {
             notification.style.animation = 'slideInRight 0.3s ease-out reverse';
             setTimeout(() => notification.remove(), 300);

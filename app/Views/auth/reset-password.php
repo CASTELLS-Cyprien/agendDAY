@@ -19,12 +19,22 @@
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($this->csrfToken()) ?>">
             <div class="form-group">
                 <label class="form-label" for="newPassword">Nouveau mot de passe</label>
-                <input type="password" class="form-input" id="newPassword" name="newPassword" required minlength="8">
+                <div class="password-field">
+                    <input type="password" class="form-input" id="newPassword" name="newPassword" required minlength="8">
+                    <button type="button" class="password-toggle" data-target="newPassword" aria-label="Afficher le mot de passe">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
             </div>
             <div class="form-group">
                 <label class="form-label" for="confirmNewPassword">Confirmer le mot de passe</label>
-                <input type="password" class="form-input" id="confirmNewPassword" name="confirmNewPassword" required
-                    minlength="8">
+                <div class="password-field">
+                    <input type="password" class="form-input" id="confirmNewPassword" name="confirmNewPassword" required
+                        minlength="8" data-match-password="newPassword">
+                    <button type="button" class="password-toggle" data-target="confirmNewPassword" aria-label="Afficher le mot de passe">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
             </div>
             <div class="form-actions">
                 <button type="submit" class="form-submit">Réinitialiser</button>

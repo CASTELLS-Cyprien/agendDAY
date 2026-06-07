@@ -92,6 +92,40 @@
   color: var(--form-text-muted);
 }
 
+/* Champ mot de passe avec bouton afficher/masquer */
+.password-field {
+  position: relative;
+}
+
+.password-field .form-input {
+  padding-right: var(--spacing-8);
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: var(--spacing-2);
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--form-text-muted);
+  cursor: pointer;
+  padding: var(--spacing-1) var(--spacing-2);
+  font-size: var(--font-size-base);
+  transition: color var(--transition-fast);
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+  color: var(--form-text);
+}
+
+.password-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--border-radius-sm);
+}
+
 .form-textarea {
   min-height: 80px;
   resize: vertical;
@@ -134,6 +168,16 @@
 .form-submit:hover {
   background: var(--primary-dark);
   transform: translateY(-1px);
+}
+
+.form-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.form-submit:disabled:hover {
+  background: var(--primary-color);
 }
 
 .form-link {

@@ -6,6 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="x-ua-compatible" content="ie=edge">
 
+    <!-- Applique le thème enregistré avant le premier rendu pour éviter un flash du thème clair -->
+    <script>
+        (function () {
+            try {
+                document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
+            } catch (e) {}
+        })();
+    </script>
+
     <?php
     $baseUrl  = APP_URL;
     $pages = [

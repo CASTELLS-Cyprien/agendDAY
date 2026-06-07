@@ -20,7 +20,12 @@
             </div>
             <div class="form-group">
                 <label class="form-label" for="motDePasse">Mot de passe</label>
-                <input type="password" class="form-input" id="motDePasse" name="motDePasse" required>
+                <div class="password-field">
+                    <input type="password" class="form-input" id="motDePasse" name="motDePasse" required>
+                    <button type="button" class="password-toggle" data-target="motDePasse" aria-label="Afficher le mot de passe">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
             </div>
             <div class="form-actions">
                 <button type="submit" class="form-submit">Se connecter</button>
