@@ -2,11 +2,6 @@
 declare(strict_types=1);
 namespace App\Services;
 
-// PHPMailer n'est pas géré par l'autoloader PSR-4 du projet — inclusion explicite au niveau du fichier
-require_once __DIR__ . '/../../vendor/phpmailer/Exception.php';
-require_once __DIR__ . '/../../vendor/phpmailer/PHPMailer.php';
-require_once __DIR__ . '/../../vendor/phpmailer/SMTP.php';
-
 use PHPMailer\PHPMailer\PHPMailer;
 
 class MailService

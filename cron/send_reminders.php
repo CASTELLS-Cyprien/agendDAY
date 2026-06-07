@@ -8,6 +8,9 @@ date_default_timezone_set('Europe/Paris');
 
 require_once __DIR__ . '/../config/config.php';
 
+// Autoloader Composer — dépendances tierces (PHPMailer, etc.)
+require_once __DIR__ . '/../vendor/autoload.php';
+
 // Autoloader PSR-4 du projet — permet d'utiliser EventModel et MailService
 spl_autoload_register(function (string $class): void {
     $prefixes = [

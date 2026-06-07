@@ -2,6 +2,15 @@ Options -Indexes
 RewriteEngine On
 
 # ============================================================
+# SÉCURITÉ — Forcer HTTPS (redirection 301)
+# Le test sur X-Forwarded-Proto couvre le cas d'un proxy/load-balancer
+# OVH qui termine le TLS en amont et transmet en HTTP en interne.
+# ============================================================
+RewriteCond %{HTTPS} off
+RewriteCond %{HTTP:X-Forwarded-Proto} !https
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# ============================================================
 # SÉCURITÉ — Bloquer accès direct aux répertoires internes
 # ============================================================
 RewriteRule ^(app|core|config|vendor)/  - [F,L]
@@ -40,6 +49,10 @@ RewriteRule ^ index.php [L]
     Header always set X-Content-Type-Options "nosniff"
     Header always set X-Frame-Options "SAMEORIGIN"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # HSTS — indique aux navigateurs de toujours utiliser HTTPS sur ce domaine
+    # (et ses sous-domaines) pendant 1 an, même si l'utilisateur tape http://
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
     # Content-Security-Policy — limite les origines autorisées pour les scripts,
     # styles, polices, images, etc. 'unsafe-inline' reste nécessaire pour les
