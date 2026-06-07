@@ -13,6 +13,7 @@
         </div>
 
         <form action="/contact" method="post" id="contactForm">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($this->csrfToken()) ?>">
             <div class="form-group">
                 <label class="form-label" for="nom">Nom</label>
                 <input type="text" class="form-input" id="nom" name="nom" required>

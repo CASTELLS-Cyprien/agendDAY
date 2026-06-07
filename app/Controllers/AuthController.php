@@ -7,6 +7,12 @@ use App\Services\MailService;
 
 class AuthController extends BaseController
 {
+    private const MIN_PASSWORD_LENGTH = 8;
+
+    // Hash factice (bcrypt) utilisé pour égaliser le temps de réponse quand l'email
+    // n'existe pas — évite de révéler par mesure de timing si un compte existe.
+    private const DUMMY_PASSWORD_HASH = '$2y$10$cGkGAUsPyjNmE8/liAs.hOPlXGcnTF2OO7ZtFkIClBxewqrMSvhMO';
+
     public function showLogin(): void
     {
         $this->requireGuest();
@@ -19,6 +25,7 @@ class AuthController extends BaseController
     public function login(): void
     {
         $this->requireGuest();
+        $this->requireCsrf('/connexion');
 
         $email      = trim($_POST['email'] ?? '');
         $motDePasse = $_POST['motDePasse'] ?? '';
@@ -28,9 +35,19 @@ class AuthController extends BaseController
             $this->redirect('/connexion');
         }
 
+        if (!$this->rateLimit('login_' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 15, 300)) {
+            $this->flash('Trop de tentatives de connexion. Veuillez réessayer dans quelques minutes.');
+            $this->redirect('/connexion');
+        }
+
         $user = (new UserModel())->findByEmail($email);
 
-        if ($user === null) {
+        // password_verify est systématiquement exécuté (avec un hash factice si le
+        // compte n'existe pas) pour que le temps de réponse ne révèle pas si l'email
+        // est enregistré (attaque par mesure de temps / énumération de comptes).
+        $passwordValid = password_verify($motDePasse, $user['motDePasse'] ?? self::DUMMY_PASSWORD_HASH);
+
+        if ($user === null || !$passwordValid) {
             $this->flash('Email ou mot de passe incorrect.');
             $this->redirect('/connexion');
         }
@@ -40,11 +57,9 @@ class AuthController extends BaseController
             $this->redirect('/inscription');
         }
 
-        if (!password_verify($motDePasse, $user['motDePasse'])) {
-            $this->flash('Email ou mot de passe incorrect.');
-            $this->redirect('/connexion');
-        }
-
+        // Régénère l'identifiant de session après authentification — empêche la
+        // fixation de session (réutilisation d'un ID de session pré-connexion).
+        session_regenerate_id(true);
         $_SESSION['id'] = $user['id'];
         $this->redirect('/calendrier');
     }
@@ -61,6 +76,7 @@ class AuthController extends BaseController
     public function register(): void
     {
         $this->requireGuest();
+        $this->requireCsrf('/inscription');
 
         $nomUtilisateur      = trim($_POST['nomUtilisateur'] ?? '');
         $email               = trim($_POST['email'] ?? '');
@@ -77,8 +93,18 @@ class AuthController extends BaseController
             $this->redirect('/inscription');
         }
 
+        if (\strlen($motDePasse) < self::MIN_PASSWORD_LENGTH) {
+            $this->flash('Le mot de passe doit contenir au moins ' . self::MIN_PASSWORD_LENGTH . ' caractères.');
+            $this->redirect('/inscription');
+        }
+
         if ($motDePasse !== $confirmerMotDePasse) {
             $this->flash('Les mots de passe ne correspondent pas.');
+            $this->redirect('/inscription');
+        }
+
+        if (!$this->rateLimit('register_' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 10, 3600)) {
+            $this->flash('Trop de tentatives d\'inscription. Veuillez réessayer plus tard.');
             $this->redirect('/inscription');
         }
 
@@ -128,10 +154,17 @@ class AuthController extends BaseController
 
     public function forgotPassword(): void
     {
+        $this->requireCsrf('/mot-de-passe-oublie');
+
         $email = trim($_POST['email'] ?? '');
 
         if (empty($email)) {
             $this->flash('Veuillez saisir votre adresse email.');
+            $this->redirect('/mot-de-passe-oublie');
+        }
+
+        if (!$this->rateLimit('forgot_' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 5, 600)) {
+            $this->flash('Si cette adresse est associée à un compte, un email vous a été envoyé.');
             $this->redirect('/mot-de-passe-oublie');
         }
 
@@ -182,6 +215,8 @@ class AuthController extends BaseController
 
     public function resetPassword(): void
     {
+        $this->requireCsrf('/mot-de-passe-oublie');
+
         $token          = $_GET['token'] ?? '';
         $newPassword    = $_POST['newPassword'] ?? '';
         $confirmPassword = $_POST['confirmNewPassword'] ?? '';

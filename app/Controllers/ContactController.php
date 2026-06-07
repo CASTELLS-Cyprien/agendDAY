@@ -18,6 +18,8 @@ class ContactController extends BaseController
 
     public function send(): void
     {
+        $this->requireCsrf('/contact');
+
         if (empty($_POST['g-recaptcha-response'])) {
             $this->flash('Veuillez compléter le reCAPTCHA.');
             $this->redirect('/contact');

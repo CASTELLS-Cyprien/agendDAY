@@ -13,6 +13,7 @@
         </div>
 
         <form action="/inscription" method="post">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($this->csrfToken()) ?>">
             <div class="form-group">
                 <label class="form-label" for="nomUtilisateur">Nom d'utilisateur</label>
                 <input type="text" class="form-input" id="nomUtilisateur" name="nomUtilisateur" required>

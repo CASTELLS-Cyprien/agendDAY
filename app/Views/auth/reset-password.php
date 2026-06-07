@@ -16,6 +16,7 @@
         </div>
 
         <form action="/reinitialiser-mot-de-passe?token=<?= htmlspecialchars($token) ?>" method="post">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($this->csrfToken()) ?>">
             <div class="form-group">
                 <label class="form-label" for="newPassword">Nouveau mot de passe</label>
                 <input type="password" class="form-input" id="newPassword" name="newPassword" required minlength="8">

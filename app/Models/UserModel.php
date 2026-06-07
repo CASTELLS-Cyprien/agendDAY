@@ -4,6 +4,17 @@ namespace App\Models;
 
 class UserModel extends BaseModel
 {
+    /**
+     * Les jetons (confirmation, reset) sont stockés sous forme de hash SHA-256 :
+     * en cas de fuite de la base, les jetons bruts envoyés par email restent
+     * inutilisables (même principe que pour les mots de passe, en plus léger
+     * car ce sont des jetons aléatoires à usage unique et non des secrets choisis).
+     */
+    private function hashToken(string $token): string
+    {
+        return hash('sha256', $token);
+    }
+
     public function findByEmail(string $email): ?array
     {
         // Colonnes explicites — évite d'exposer des champs futurs non prévus
@@ -21,16 +32,18 @@ class UserModel extends BaseModel
             "SELECT id, nomUtilisateur, motDePasse FROM users
              WHERE reset_token = :token AND reset_token_expiration > NOW()"
         );
-        $stmt->execute([':token' => $token]);
+        $stmt->execute([':token' => $this->hashToken($token)]);
         return $stmt->fetch() ?: null;
     }
 
     public function findByConfirmationToken(string $token): ?array
     {
         $stmt = $this->db()->prepare(
-            "SELECT id FROM users WHERE confirmation_token = :token AND is_confirmed = 0"
+            "SELECT id FROM users
+             WHERE confirmation_token = :token AND is_confirmed = 0
+               AND confirmation_token_expiration > NOW()"
         );
-        $stmt->execute([':token' => $token]);
+        $stmt->execute([':token' => $this->hashToken($token)]);
         return $stmt->fetch() ?: null;
     }
 
@@ -48,14 +61,16 @@ class UserModel extends BaseModel
         string $token
     ): int {
         $stmt = $this->db()->prepare(
-            "INSERT INTO users (nomUtilisateur, email, motDePasse, confirmation_token, is_confirmed)
-             VALUES (:nomUtilisateur, :email, :motDePasse, :token, 0)"
+            "INSERT INTO users
+                (nomUtilisateur, email, motDePasse, confirmation_token, confirmation_token_expiration, is_confirmed)
+             VALUES (:nomUtilisateur, :email, :motDePasse, :token, :expiration, 0)"
         );
         $stmt->execute([
             ':nomUtilisateur' => $nomUtilisateur,
             ':email'          => $email,
             ':motDePasse'     => $hashedPassword,
-            ':token'          => $token,
+            ':token'          => $this->hashToken($token),
+            ':expiration'     => date('Y-m-d H:i:s', strtotime('+24 hours')),
         ]);
         return (int) $this->db()->lastInsertId();
     }
@@ -63,10 +78,10 @@ class UserModel extends BaseModel
     public function confirmAccount(string $token): bool
     {
         $stmt = $this->db()->prepare(
-            "UPDATE users SET is_confirmed = 1, confirmation_token = NULL
-             WHERE confirmation_token = :token"
+            "UPDATE users SET is_confirmed = 1, confirmation_token = NULL, confirmation_token_expiration = NULL
+             WHERE confirmation_token = :token AND confirmation_token_expiration > NOW()"
         );
-        $stmt->execute([':token' => $token]);
+        $stmt->execute([':token' => $this->hashToken($token)]);
         return $stmt->rowCount() > 0;
     }
 
@@ -76,7 +91,11 @@ class UserModel extends BaseModel
             "UPDATE users SET reset_token = :token, reset_token_expiration = :expiration
              WHERE email = :email"
         );
-        $stmt->execute([':token' => $token, ':expiration' => $expiration, ':email' => $email]);
+        $stmt->execute([
+            ':token'      => $this->hashToken($token),
+            ':expiration' => $expiration,
+            ':email'      => $email,
+        ]);
     }
 
     public function updatePassword(int $id, string $hash): void

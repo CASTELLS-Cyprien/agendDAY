@@ -567,10 +567,11 @@ class CalendarApp {
         if (!confirm('Supprimer cet événement ? Cette action est irréversible.')) return;
 
         try {
+            const csrfToken = document.getElementById('csrfToken')?.value || '';
             const response = await fetch('/api/events/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `eventID=${eventId}`
+                body: `eventID=${encodeURIComponent(eventId)}&csrf_token=${encodeURIComponent(csrfToken)}`
             });
 
             const data = await response.json();

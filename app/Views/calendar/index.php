@@ -69,6 +69,7 @@
         </div>
 
         <form id="eventForm" method="post">
+            <input type="hidden" name="csrf_token" id="csrfToken" value="<?= htmlspecialchars($this->csrfToken()) ?>">
             <input type="hidden" name="eventId" id="eventId">
             <input type="hidden" name="date" id="selectedDateInput">
 

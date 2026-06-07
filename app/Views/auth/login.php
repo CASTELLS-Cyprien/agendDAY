@@ -13,6 +13,7 @@
         </div>
 
         <form action="/connexion" method="post">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($this->csrfToken()) ?>">
             <div class="form-group">
                 <label class="form-label" for="email">Email</label>
                 <input type="email" class="form-input" id="email" name="email" required>

@@ -20,6 +20,18 @@ spl_autoload_register(function (string $class): void {
     }
 });
 
+$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || ($_SERVER['SERVER_PORT'] ?? null) === '443';
+
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path'     => '/',
+    'domain'   => '',
+    'secure'   => $isHttps,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+
 session_start();
 
 $router = new Core\Router();

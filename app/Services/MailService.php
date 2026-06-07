@@ -87,11 +87,11 @@ class MailService
                 <div class='header'><h1>Nouveau message de contact</h1></div>
                 <div class='content'>
                     <div class='details'>
-                        <p><strong>Nom :</strong> {$nom}</p>
-                        <p><strong>Email :</strong> {$email}</p>
+                        <p><strong>Nom :</strong> " . htmlspecialchars($nom) . "</p>
+                        <p><strong>Email :</strong> " . htmlspecialchars($email) . "</p>
                         <p><strong>Message :</strong><br>" . nl2br(htmlspecialchars($message)) . "</p>
                     </div>
-                    <p><a href='mailto:{$email}' class='cta-button'>Répondre</a></p>
+                    <p><a href='mailto:" . htmlspecialchars($email) . "' class='cta-button'>Répondre</a></p>
                 </div>
             </div></body></html>";
         $mail->AltBody = "Nom : {$nom}\nEmail : {$email}\nMessage :\n{$message}";

@@ -73,4 +73,75 @@ abstract class BaseController
         unset($_SESSION['flash']);
         return $message;
     }
+
+    /**
+     * Jeton CSRF lié à la session — à inclure dans tout formulaire / requête POST.
+     */
+    protected function csrfToken(): string
+    {
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
+        return $_SESSION['csrf_token'];
+    }
+
+    protected function verifyCsrf(): bool
+    {
+        $submitted = $_POST['csrf_token'] ?? '';
+        return is_string($submitted)
+            && $submitted !== ''
+            && isset($_SESSION['csrf_token'])
+            && hash_equals($_SESSION['csrf_token'], $submitted);
+    }
+
+    /**
+     * À appeler en tête des actions POST classiques (formulaires HTML).
+     */
+    protected function requireCsrf(string $redirectTo): void
+    {
+        if (!$this->verifyCsrf()) {
+            $this->flash('Requête invalide ou expirée. Veuillez réessayer.');
+            $this->redirect($redirectTo);
+        }
+    }
+
+    /**
+     * À appeler en tête des actions POST de l'API JSON.
+     */
+    protected function requireCsrfApi(): void
+    {
+        if (!$this->verifyCsrf()) {
+            $this->json(['error' => 'Jeton de sécurité invalide. Veuillez recharger la page.'], 403);
+        }
+    }
+
+    /**
+     * Limiteur de tentatives basé sur des fichiers temporaires (pas de table dédiée
+     * nécessaire) — même approche que les verrous utilisés par cron/send_reminders.php.
+     * Retourne false si la limite est dépassée pour la fenêtre de temps donnée.
+     */
+    protected function rateLimit(string $key, int $maxAttempts, int $windowSeconds): bool
+    {
+        $file = sys_get_temp_dir() . '/agendday_rl_' . hash('sha256', $key) . '.json';
+
+        $now   = time();
+        $state = ['count' => 0, 'start' => $now];
+
+        $raw = @file_get_contents($file);
+        if ($raw !== false) {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded) && isset($decoded['count'], $decoded['start'])) {
+                $state = $decoded;
+            }
+        }
+
+        if ($now - (int) $state['start'] > $windowSeconds) {
+            $state = ['count' => 0, 'start' => $now];
+        }
+
+        $state['count']++;
+        @file_put_contents($file, json_encode($state), LOCK_EX);
+
+        return $state['count'] <= $maxAttempts;
+    }
 }

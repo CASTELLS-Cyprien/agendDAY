@@ -19,6 +19,7 @@ class EventController extends BaseController
     public function store(): void
     {
         $this->requireAuthApi();
+        $this->requireCsrfApi();
 
         $title       = trim($_POST['title'] ?? '');
         $time        = trim($_POST['time'] ?? '');
@@ -48,6 +49,7 @@ class EventController extends BaseController
     public function update(): void
     {
         $this->requireAuthApi();
+        $this->requireCsrfApi();
 
         $eventId     = (int) ($_POST['eventId'] ?? 0);
         $title       = trim($_POST['title'] ?? '');
@@ -78,6 +80,7 @@ class EventController extends BaseController
     public function delete(): void
     {
         $this->requireAuthApi();
+        $this->requireCsrfApi();
 
         $eventId = (int) ($_POST['eventID'] ?? 0);
         if ($eventId <= 0) {

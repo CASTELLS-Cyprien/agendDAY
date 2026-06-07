@@ -92,39 +92,44 @@ foreach ($events as $event) {
     }
     touch($lockFile);
 
-    $eventDt      = new DateTime($event['dateEvent'] . ' ' . $event['time'], new DateTimeZone('Europe/Paris'));
-    $diff         = $now->diff($eventDt);
-    $tempsRestant = $diff->h > 0 ? "dans {$diff->h}h{$diff->i}min" : "dans {$diff->i} minute(s)";
+    // try/finally : garantit la suppression du verrou même si une erreur fatale
+    // (Throwable non Exception, ex. TypeError) interrompt le traitement de cet
+    // événement — sans attendre l'expiration du verrou (10 min) au tour suivant.
+    try {
+        $eventDt      = new DateTime($event['dateEvent'] . ' ' . $event['time'], new DateTimeZone('Europe/Paris'));
+        $diff         = $now->diff($eventDt);
+        $tempsRestant = $diff->h > 0 ? "dans {$diff->h}h{$diff->i}min" : "dans {$diff->i} minute(s)";
 
-    $success   = false;
-    $lastError = '';
-    for ($attempt = 1; $attempt <= 3 && !$success; $attempt++) {
-        try {
-            $mailService->sendReminder($event['email'], $event['nomUtilisateur'], $event, $tempsRestant);
+        $success   = false;
+        $lastError = '';
+        for ($attempt = 1; $attempt <= 3 && !$success; $attempt++) {
+            try {
+                $mailService->sendReminder($event['email'], $event['nomUtilisateur'], $event, $tempsRestant);
 
-            $bdd->prepare("UPDATE events SET sentReminder = TRUE WHERE id = :id")
-                ->execute([':id' => $event['id']]);
+                $bdd->prepare("UPDATE events SET sentReminder = TRUE WHERE id = :id")
+                    ->execute([':id' => $event['id']]);
 
-            $sent++;
-            $success = true;
-            error_log('[cron] Rappel envoyé — ID ' . $event['id'] . ' à ' . $event['email']);
-        } catch (\Exception $e) {
-            $lastError = $e->getMessage();
-            error_log('[cron] Tentative ' . $attempt . ' échouée — ID ' . $event['id'] . ' : ' . $lastError);
-            if ($attempt < 3) {
-                sleep(2);
+                $sent++;
+                $success = true;
+                error_log('[cron] Rappel envoyé — ID ' . $event['id'] . ' à ' . $event['email']);
+            } catch (\Exception $e) {
+                $lastError = $e->getMessage();
+                error_log('[cron] Tentative ' . $attempt . ' échouée — ID ' . $event['id'] . ' : ' . $lastError);
+                if ($attempt < 3) {
+                    sleep(2);
+                }
             }
         }
-    }
 
-    if (!$success) {
-        $fails++;
-        error_log('[cron] Échec définitif — ID ' . $event['id']);
-        echo "\n[ERREUR ID {$event['id']}] " . $lastError;
-    }
-
-    if (file_exists($lockFile)) {
-        unlink($lockFile);
+        if (!$success) {
+            $fails++;
+            error_log('[cron] Échec définitif — ID ' . $event['id']);
+            echo "\n[ERREUR ID {$event['id']}] " . $lastError;
+        }
+    } finally {
+        if (file_exists($lockFile)) {
+            unlink($lockFile);
+        }
     }
 }
 
