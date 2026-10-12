@@ -1,14 +1,18 @@
 /* ===== CSS POUR LA PAGE D'ACCUEIL (MINIMALISTE, MODERNE, UX OPTIMISÉ) ===== */
-/* Animation */
-.animate-slide-up {
-    opacity: 0;
-    transform: translateY(20px);
-    transition: opacity var(--transition-normal), transform var(--transition-normal);
-}
+/* Animation d'apparition au défilement : uniquement si le JavaScript est actif
+   (classe .js posée par theme-init.js) et si l'utilisateur accepte les animations.
+   Sinon, le contenu reste visible d'emblée. */
+@media (prefers-reduced-motion: no-preference) {
+    .js .animate-slide-up {
+        opacity: 0;
+        transform: translateY(16px);
+        transition: opacity var(--transition-slow), transform var(--transition-slow);
+    }
 
-.animate-slide-up.is-visible {
-    opacity: 1;
-    transform: translateY(0);
+    .js .animate-slide-up.is-visible {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* Header */
@@ -301,16 +305,23 @@
     margin-bottom: var(--spacing-2);
 }
 
-/* CTA Section */
-.cta-section {
-    padding: var(--spacing-16) 0;
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
-    color: var(--white);
+/* Étapes « Comment ça marche » */
+.steps-list {
+    list-style: none;
+    position: relative;
+    z-index: 1;
 }
 
-.cta-content .section-title,
-.cta-content .section-subtitle {
-    color: var(--white);
+/* CTA Section — fond sobre : le texte reste contrasté dans les deux thèmes */
+.cta-section {
+    padding: var(--spacing-16) 0;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+}
+
+.cta-content {
+    max-width: 720px;
+    margin: 0 auto;
 }
 
 /* Les styles .btn sont définis dans global.css — pas de redéfinition ici */

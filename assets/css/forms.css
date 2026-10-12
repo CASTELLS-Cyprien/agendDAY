@@ -8,13 +8,9 @@
   --form-text-muted: var(--text-muted);
   --form-hover: var(--bg-secondary);
   --form-active: var(--primary-color);
-  --form-error: #ef4444;
-  --form-success: #22c55e;
-}
-
-[data-theme="dark"] {
-  --form-error: #dc2626;
-  --form-success: #16a34a;
+  /* Couleurs de statut du design system : contrastées dans les deux thèmes */
+  --form-error: var(--error-color);
+  --form-success: var(--success-color);
 }
 
 /* Layout principal */
@@ -71,10 +67,16 @@
   margin-bottom: var(--spacing-1);
 }
 
+.form-hint {
+  font-weight: var(--font-weight-normal);
+  color: var(--form-text-muted);
+}
+
 .form-input {
   width: 100%;
-  padding: var(--spacing-2);
-  border: 1px solid var(--form-border);
+  min-height: 2.75rem;
+  padding: var(--spacing-2) var(--spacing-3);
+  border: 1px solid var(--border-strong);
   border-radius: var(--border-radius);
   background: var(--bg-secondary);
   color: var(--form-text);
@@ -154,9 +156,14 @@
 
 .form-submit {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2);
+  min-height: 2.75rem;
   padding: var(--spacing-2) var(--spacing-4);
   background: var(--primary-color);
-  color: var(--white);
+  color: var(--on-primary);
   border: none;
   border-radius: var(--border-radius);
   font-size: var(--font-size-base);
@@ -167,7 +174,6 @@
 
 .form-submit:hover {
   background: var(--primary-dark);
-  transform: translateY(-1px);
 }
 
 .form-submit:disabled {
@@ -196,6 +202,11 @@
   text-align: center;
   margin-top: var(--spacing-4);
   font-size: var(--font-size-sm);
+  color: var(--form-text-muted);
+}
+
+.form-footer p {
+  margin-bottom: var(--spacing-2);
   color: var(--form-text-muted);
 }
 
@@ -241,5 +252,14 @@
 
 .g-recaptcha {
     margin: 16px 0;
+}
+
+/* Le widget reCAPTCHA a une largeur fixe (304 px) : réduit sur les très petits écrans */
+@media (max-width: 359px) {
+  .g-recaptcha {
+    transform: scale(0.85);
+    transform-origin: left top;
+    height: 66px;
+  }
 }
 

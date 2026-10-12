@@ -3,17 +3,86 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\EventModel;
+use App\Models\ReminderModel;
+use App\Services\EventInput;
+use App\Services\EventPresenter;
+use App\Services\Recurrence;
+use DateTimeImmutable;
 
+/**
+ * API JSON des événements. Toutes les opérations sont limitées aux événements
+ * de l'utilisateur connecté (filtre userID dans chaque requête SQL).
+ */
 class EventController extends BaseController
 {
-    private const MAX_TITLE_LENGTH       = 200;
-    private const MAX_DESCRIPTION_LENGTH = 2000;
+    /** Amplitude maximale d'une plage demandée (un mois affiché = 42 jours). */
+    private const MAX_RANGE_DAYS = 100;
 
-    public function getAll(): void
+    /**
+     * GET /api/events?from=YYYY-MM-DD&to=YYYY-MM-DD — occurrences de la période.
+     */
+    public function index(): void
     {
         $this->requireAuthApi();
-        $events = (new EventModel())->getAllByUser((int) $_SESSION['id']);
-        $this->json($events);
+
+        $from = $this->dateParam($_GET['from'] ?? null);
+        $to   = $this->dateParam($_GET['to'] ?? null);
+
+        if ($from === null || $to === null || $to < $from) {
+            $this->json(['error' => 'Période invalide (paramètres from et to au format AAAA-MM-JJ).'], 400);
+        }
+        if ((new DateTimeImmutable($from))->diff(new DateTimeImmutable($to))->days > self::MAX_RANGE_DAYS) {
+            $this->json(['error' => 'Période trop longue (' . self::MAX_RANGE_DAYS . ' jours maximum).'], 400);
+        }
+
+        $rows      = (new EventModel())->listInRange($this->userId(), $from, $to);
+        $reminders = (new ReminderModel())->offsetsByEvent(array_map(fn ($r) => (int) $r['id'], $rows));
+
+        $this->json([
+            'from'   => $from,
+            'to'     => $to,
+            'events' => EventPresenter::occurrences($rows, $reminders, $from, $to),
+        ]);
+    }
+
+    /**
+     * GET /api/events/search?q=… — recherche dans le titre, la description et le lieu.
+     * Pour une série, la date retournée est la prochaine occurrence.
+     */
+    public function search(): void
+    {
+        $this->requireAuthApi();
+
+        $query = trim((string) ($_GET['q'] ?? ''));
+        if (mb_strlen($query) < 2 || mb_strlen($query) > 100) {
+            $this->json(['error' => 'La recherche doit contenir entre 2 et 100 caractères.'], 400);
+        }
+
+        $rows      = (new EventModel())->search($this->userId(), $query);
+        $reminders = (new ReminderModel())->offsetsByEvent(array_map(fn ($r) => (int) $r['id'], $rows));
+        $today     = (new DateTimeImmutable())->format('Y-m-d');
+
+        $results = [];
+        foreach ($rows as $row) {
+            $date = $row['dateEvent'];
+            if ($row['recurrence'] !== 'none') {
+                $date = Recurrence::first($row['dateEvent'], $row['recurrence'], $row['recurrence_until'] ?: null, $today)
+                    ?? ($row['recurrence_until'] ?: $row['dateEvent']);
+            }
+            $results[] = EventPresenter::event($row, $reminders[(int) $row['id']] ?? [], $date);
+        }
+
+        // À venir d'abord (du plus proche au plus lointain), puis passés (du plus récent au plus ancien)
+        usort($results, static function (array $a, array $b) use ($today): int {
+            $aFuture = $a['date'] >= $today;
+            $bFuture = $b['date'] >= $today;
+            if ($aFuture !== $bFuture) {
+                return $aFuture ? -1 : 1;
+            }
+            return $aFuture ? $a['date'] <=> $b['date'] : $b['date'] <=> $a['date'];
+        });
+
+        $this->json(['query' => $query, 'results' => $results]);
     }
 
     public function store(): void
@@ -21,29 +90,19 @@ class EventController extends BaseController
         $this->requireAuthApi();
         $this->requireCsrfApi();
 
-        $title       = trim($_POST['title'] ?? '');
-        $time        = trim($_POST['time'] ?? '');
-        $date        = trim($_POST['date'] ?? '');
-        $description = trim($_POST['descriptionEvent'] ?? '');
-
-        $errors = $this->validate($title, $time, $date, $description);
-        if (!empty($errors)) {
-            $this->json(['error' => implode(' ', $errors)], 400);
+        ['data' => $data, 'errors' => $errors] = EventInput::fromRequest($_POST);
+        if ($errors !== []) {
+            $this->validationError($errors);
         }
 
-        try {
-            $id = (new EventModel())->create(
-                (int) $_SESSION['id'],
-                $title,
-                $time,
-                $date,
-                $description
-            );
-            $this->json(['success' => true, 'id' => $id, 'message' => 'Événement ajouté avec succès.']);
-        } catch (\PDOException $e) {
-            error_log('Erreur ajout événement : ' . $e->getMessage());
-            $this->json(['error' => 'Erreur lors de l\'ajout de l\'événement.'], 500);
-        }
+        $model = new EventModel();
+        $id    = $model->create($this->userId(), $data, new DateTimeImmutable());
+
+        $this->json([
+            'success' => true,
+            'message' => 'Événement ajouté.',
+            'event'   => $this->present($model, $id),
+        ], 201);
     }
 
     public function update(): void
@@ -51,30 +110,26 @@ class EventController extends BaseController
         $this->requireAuthApi();
         $this->requireCsrfApi();
 
-        $eventId     = (int) ($_POST['eventId'] ?? 0);
-        $title       = trim($_POST['title'] ?? '');
-        $time        = trim($_POST['time'] ?? '');
-        $date        = trim($_POST['date'] ?? '');
-        $description = trim($_POST['descriptionEvent'] ?? '');
+        $eventId = (int) ($_POST['eventId'] ?? 0);
+        if ($eventId <= 0) {
+            $this->json(['error' => 'Événement non précisé.'], 400);
+        }
 
-        $errors = $this->validate($title, $time, $date, $description);
-        if (!empty($errors)) {
-            $this->json(['error' => implode(' ', $errors)], 400);
+        ['data' => $data, 'errors' => $errors] = EventInput::fromRequest($_POST);
+        if ($errors !== []) {
+            $this->validationError($errors);
         }
 
         $model = new EventModel();
-
-        if ($model->findByIdAndUser($eventId, (int) $_SESSION['id']) === null) {
-            $this->json(['error' => 'Événement introuvable ou accès non autorisé.'], 403);
+        if (!$model->update($eventId, $this->userId(), $data, new DateTimeImmutable())) {
+            $this->json(['error' => 'Événement introuvable. Il a peut-être été supprimé.'], 404);
         }
 
-        try {
-            $model->update($eventId, (int) $_SESSION['id'], $title, $time, $date, $description);
-            $this->json(['success' => true, 'message' => 'Événement modifié avec succès.']);
-        } catch (\PDOException $e) {
-            error_log('Erreur modification événement : ' . $e->getMessage());
-            $this->json(['error' => 'Erreur lors de la mise à jour.'], 500);
-        }
+        $this->json([
+            'success' => true,
+            'message' => 'Événement modifié.',
+            'event'   => $this->present($model, $eventId),
+        ]);
     }
 
     public function delete(): void
@@ -82,68 +137,44 @@ class EventController extends BaseController
         $this->requireAuthApi();
         $this->requireCsrfApi();
 
-        $eventId = (int) ($_POST['eventID'] ?? 0);
+        // « eventID » : nom historique du paramètre, conservé pour compatibilité
+        $eventId = (int) ($_POST['eventId'] ?? $_POST['eventID'] ?? 0);
         if ($eventId <= 0) {
-            $this->json(['error' => 'ID de l\'événement manquant.'], 400);
+            $this->json(['error' => 'Événement non précisé.'], 400);
         }
 
-        try {
-            $deleted = (new EventModel())->delete($eventId, (int) $_SESSION['id']);
-            if ($deleted) {
-                $this->json(['success' => true]);
-            } else {
-                $this->json(['error' => 'Événement non trouvé ou non autorisé.'], 403);
-            }
-        } catch (\PDOException $e) {
-            error_log('Erreur suppression événement : ' . $e->getMessage());
-            $this->json(['error' => 'Erreur lors de la suppression.'], 500);
+        if (!(new EventModel())->delete($eventId, $this->userId())) {
+            $this->json(['error' => 'Événement introuvable. Il a peut-être déjà été supprimé.'], 404);
         }
+
+        $this->json(['success' => true, 'message' => 'Événement supprimé.']);
     }
 
-    public function getByDate(): void
+    private function present(EventModel $model, int $id): ?array
     {
-        $this->requireAuthApi();
-
-        $date = trim($_POST['date'] ?? '');
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-            $this->json(['error' => 'Format de date invalide.'], 400);
+        $row = $model->findForUser($id, $this->userId());
+        if ($row === null) {
+            return null;
         }
-
-        try {
-            $events = (new EventModel())->getByDate((int) $_SESSION['id'], $date);
-            $this->json($events);
-        } catch (\PDOException $e) {
-            error_log('Erreur récupération événements : ' . $e->getMessage());
-            $this->json(['error' => 'Erreur lors de la récupération des événements.'], 500);
-        }
+        $reminders = (new ReminderModel())->offsetsByEvent([$id]);
+        return EventPresenter::event($row, $reminders[$id] ?? []);
     }
 
-    private function validate(
-        string $title,
-        string $time,
-        string $date,
-        string $description
-    ): array {
-        $errors = [];
+    private function validationError(array $errors): void
+    {
+        $this->json([
+            'error'  => count($errors) > 1
+                ? 'Veuillez corriger les ' . count($errors) . ' champs signalés.'
+                : 'Veuillez corriger le champ signalé.',
+            'fields' => $errors,
+        ], 422);
+    }
 
-        if ($title === '') {
-            $errors[] = 'Le titre est requis.';
-        } elseif (\strlen($title) > self::MAX_TITLE_LENGTH) {
-            $errors[] = 'Le titre est trop long (' . self::MAX_TITLE_LENGTH . ' caractères max).';
+    private function dateParam(mixed $value): ?string
+    {
+        if (!is_string($value) || !preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $m)) {
+            return null;
         }
-
-        if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $time)) {
-            $errors[] = 'Heure invalide (format HH:MM requis).';
-        }
-
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-            $errors[] = 'Date invalide (format YYYY-MM-DD requis).';
-        }
-
-        if (\strlen($description) > self::MAX_DESCRIPTION_LENGTH) {
-            $errors[] = 'La description est trop longue (' . self::MAX_DESCRIPTION_LENGTH . ' caractères max).';
-        }
-
-        return $errors;
+        return checkdate((int) $m[2], (int) $m[3], (int) $m[1]) ? $value : null;
     }
 }

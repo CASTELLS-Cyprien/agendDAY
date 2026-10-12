@@ -18,6 +18,7 @@ class AuthController extends BaseController
         $this->requireGuest();
         $this->render('auth/login', [
             'flash'     => $this->getFlash(),
+            'old'       => $this->oldInput(),
             'metaTitle' => 'Connexion — AgendDAY',
         ], 'minimal');
     }
@@ -29,6 +30,7 @@ class AuthController extends BaseController
 
         $email      = trim($_POST['email'] ?? '');
         $motDePasse = $_POST['motDePasse'] ?? '';
+        $this->rememberInput(['email' => $email]);
 
         if (empty($email) || empty($motDePasse)) {
             $this->flash('Veuillez remplir tous les champs.');
@@ -53,15 +55,20 @@ class AuthController extends BaseController
         }
 
         if ((int) $user['is_confirmed'] === 0) {
-            $this->flash('Votre compte n\'est pas confirmé. Veuillez vérifier votre email.');
-            $this->redirect('/inscription');
+            $this->flash('Votre compte n\'est pas encore confirmé. Ouvrez le lien reçu par e-mail.', 'info');
+            $this->redirect('/connexion');
         }
 
-        // Régénère l'identifiant de session après authentification — empêche la
-        // fixation de session (réutilisation d'un ID de session pré-connexion).
+        // Régénère l'identifiant de session et le jeton CSRF après authentification —
+        // empêche la fixation de session et la réutilisation d'un jeton pré-connexion.
         session_regenerate_id(true);
-        $_SESSION['id'] = $user['id'];
-        $this->redirect('/calendrier');
+        $_SESSION['id']         = (int) $user['id'];
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        unset($_SESSION['old_input']);
+
+        $target = $_SESSION['after_login'] ?? '/calendrier';
+        unset($_SESSION['after_login']);
+        $this->redirect(is_string($target) && self::isInternalPath($target) ? $target : '/calendrier');
     }
 
     public function showRegister(): void
@@ -69,6 +76,7 @@ class AuthController extends BaseController
         $this->requireGuest();
         $this->render('auth/register', [
             'flash'     => $this->getFlash(),
+            'old'       => $this->oldInput(),
             'metaTitle' => 'Créer un compte — AgendDAY',
         ], 'minimal');
     }
@@ -82,14 +90,20 @@ class AuthController extends BaseController
         $email               = trim($_POST['email'] ?? '');
         $motDePasse          = $_POST['motDePasse'] ?? '';
         $confirmerMotDePasse = $_POST['confirmerMotDePasse'] ?? '';
+        $this->rememberInput(['nomUtilisateur' => $nomUtilisateur, 'email' => $email]);
 
         if (empty($nomUtilisateur) || empty($email) || empty($motDePasse) || empty($confirmerMotDePasse)) {
             $this->flash('Veuillez remplir tous les champs obligatoires.');
             $this->redirect('/inscription');
         }
 
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $this->flash('Adresse email invalide.');
+        if (mb_strlen($nomUtilisateur) > 100) {
+            $this->flash('Le nom d\'utilisateur ne doit pas dépasser 100 caractères.');
+            $this->redirect('/inscription');
+        }
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email) > 255) {
+            $this->flash('Adresse e-mail invalide.');
             $this->redirect('/inscription');
         }
 
@@ -128,26 +142,53 @@ class AuthController extends BaseController
 
         try {
             (new MailService())->sendConfirmation($email, $nomUtilisateur, $token);
-            $this->flash('Inscription réussie ! Un email de confirmation a été envoyé.');
+            $this->flash('Inscription enregistrée. Ouvrez le lien de confirmation envoyé à ' . $email . ' pour activer votre compte.', 'success');
         } catch (\Exception $e) {
             error_log('Erreur email inscription : ' . $e->getMessage());
-            $this->flash('Inscription réussie, mais erreur lors de l\'envoi de l\'email de confirmation.');
+            $this->flash('Inscription enregistrée, mais l\'e-mail de confirmation n\'a pas pu être envoyé. Contactez-nous pour activer votre compte.');
         }
 
         $this->redirect('/connexion');
     }
 
+    /**
+     * La déconnexion passe par un formulaire POST protégé par CSRF : un simple lien
+     * (ou une image piégée sur un autre site) ne peut plus déconnecter l'utilisateur.
+     */
     public function logout(): void
     {
+        $this->requireCsrf(isset($_SESSION['id']) ? '/calendrier' : '/connexion');
+
         session_unset();
         session_destroy();
+
+        // Supprime aussi le cookie de session côté navigateur
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', [
+            'expires'  => time() - 3600,
+            'path'     => $params['path'],
+            'domain'   => $params['domain'],
+            'secure'   => $params['secure'],
+            'httponly' => $params['httponly'],
+            'samesite' => $params['samesite'] ?: 'Lax',
+        ]);
+
         $this->redirect('/connexion');
+    }
+
+    /**
+     * Ancienne URL de déconnexion (lien GET) : redirige sans effet de bord.
+     */
+    public function logoutLink(): void
+    {
+        $this->redirect(isset($_SESSION['id']) ? '/calendrier' : '/connexion');
     }
 
     public function showForgotPassword(): void
     {
         $this->render('auth/forgot-password', [
             'flash'     => $this->getFlash(),
+            'old'       => $this->oldInput(),
             'metaTitle' => 'Mot de passe oublié — AgendDAY',
         ], 'minimal');
     }
@@ -157,6 +198,7 @@ class AuthController extends BaseController
         $this->requireCsrf('/mot-de-passe-oublie');
 
         $email = trim($_POST['email'] ?? '');
+        $this->rememberInput(['email' => $email]);
 
         if (empty($email)) {
             $this->flash('Veuillez saisir votre adresse email.');
@@ -164,14 +206,14 @@ class AuthController extends BaseController
         }
 
         if (!$this->rateLimit('forgot_' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 5, 600)) {
-            $this->flash('Si cette adresse est associée à un compte, un email vous a été envoyé.');
+            $this->flash('Si cette adresse est associée à un compte, un e-mail de réinitialisation vous a été envoyé.', 'info');
             $this->redirect('/mot-de-passe-oublie');
         }
 
         $user = (new UserModel())->findByEmail($email);
 
         if ($user === null) {
-            $this->flash('Si cette adresse est associée à un compte, un email vous a été envoyé.');
+            $this->flash('Si cette adresse est associée à un compte, un e-mail de réinitialisation vous a été envoyé.', 'info');
             $this->redirect('/mot-de-passe-oublie');
         }
 
@@ -185,7 +227,7 @@ class AuthController extends BaseController
             error_log('Erreur reset password : ' . $e->getMessage());
         }
 
-        $this->flash('Si cette adresse est associée à un compte, un email vous a été envoyé.');
+        $this->flash('Si cette adresse est associée à un compte, un e-mail de réinitialisation vous a été envoyé.', 'info');
         $this->redirect('/mot-de-passe-oublie');
     }
 
@@ -257,7 +299,7 @@ class AuthController extends BaseController
         try {
             $hash = password_hash($newPassword, PASSWORD_BCRYPT);
             $model->updatePassword((int) $user['id'], $hash);
-            $this->flash('Mot de passe réinitialisé avec succès. Vous pouvez vous connecter.');
+            $this->flash('Mot de passe réinitialisé. Vous pouvez vous connecter.', 'success');
         } catch (\PDOException $e) {
             error_log('Erreur reset_password : ' . $e->getMessage());
             $this->flash('Erreur lors de la mise à jour. Veuillez réessayer.');
@@ -278,7 +320,7 @@ class AuthController extends BaseController
         try {
             $confirmed = (new UserModel())->confirmAccount($token);
             if ($confirmed) {
-                $this->flash('Votre compte a été confirmé ! Vous pouvez maintenant vous connecter.');
+                $this->flash('Votre compte est confirmé. Vous pouvez maintenant vous connecter.', 'success');
             } else {
                 $this->flash('Lien de confirmation invalide ou compte déjà confirmé.');
             }

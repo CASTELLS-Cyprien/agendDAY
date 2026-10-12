@@ -106,4 +106,56 @@ class UserModel extends BaseModel
         );
         $stmt->execute([':hash' => $hash, ':id' => $id]);
     }
+
+    /**
+     * Profil et préférences de l'utilisateur connecté (sans le hash du mot de passe).
+     */
+    public function findById(int $id): ?array
+    {
+        $stmt = $this->db()->prepare(
+            "SELECT id, nomUtilisateur, email, email_reminders, default_reminder_minutes
+             FROM users WHERE id = :id"
+        );
+        $stmt->execute([':id' => $id]);
+        return $stmt->fetch() ?: null;
+    }
+
+    public function passwordHash(int $id): ?string
+    {
+        $stmt = $this->db()->prepare("SELECT motDePasse FROM users WHERE id = :id");
+        $stmt->execute([':id' => $id]);
+        $hash = $stmt->fetchColumn();
+        return is_string($hash) ? $hash : null;
+    }
+
+    public function updatePreferences(int $id, bool $emailReminders, ?int $defaultReminderMinutes): void
+    {
+        $stmt = $this->db()->prepare(
+            "UPDATE users SET email_reminders = :emailReminders, default_reminder_minutes = :defaultReminder
+             WHERE id = :id"
+        );
+        $stmt->execute([
+            ':emailReminders'  => $emailReminders ? 1 : 0,
+            ':defaultReminder' => $defaultReminderMinutes,
+            ':id'              => $id,
+        ]);
+    }
+
+    /**
+     * Supprime le compte et toutes les données associées (droit à l'effacement).
+     * Les suppressions explicites doublent les clés étrangères pour les bases
+     * qui n'en disposent pas.
+     */
+    public function deleteWithData(int $id): void
+    {
+        $this->transaction(function () use ($id): void {
+            $params = [':id' => $id];
+            $this->db()->prepare('DELETE FROM notifications WHERE user_id = :id')->execute($params);
+            $this->db()->prepare(
+                'DELETE FROM event_reminders WHERE event_id IN (SELECT id FROM events WHERE userID = :id)'
+            )->execute($params);
+            $this->db()->prepare('DELETE FROM events WHERE userID = :id')->execute($params);
+            $this->db()->prepare('DELETE FROM users WHERE id = :id')->execute($params);
+        });
+    }
 }

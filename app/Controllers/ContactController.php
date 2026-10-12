@@ -10,6 +10,7 @@ class ContactController extends BaseController
     {
         $this->render('contact/index', [
             'flash'            => $this->getFlash(),
+            'old'              => $this->oldInput(),
             'recaptchaSiteKey' => RECAPTCHA_SITE_KEY,
             'metaTitle'        => 'Contact — AgendDAY',
             'withRecaptcha'    => true,
@@ -20,7 +21,12 @@ class ContactController extends BaseController
     {
         $this->requireCsrf('/contact');
 
-        if (empty($_POST['g-recaptcha-response'])) {
+        $nom     = trim($_POST['nom'] ?? '');
+        $email   = trim($_POST['email'] ?? '');
+        $message = trim($_POST['message'] ?? '');
+        $this->rememberInput(['nom' => $nom, 'email' => $email, 'message' => $message]);
+
+        if (empty($_POST['g-recaptcha-response']) || !is_string($_POST['g-recaptcha-response'])) {
             $this->flash('Veuillez compléter le reCAPTCHA.');
             $this->redirect('/contact');
         }
@@ -30,23 +36,25 @@ class ContactController extends BaseController
             $this->redirect('/contact');
         }
 
-        $nom     = trim($_POST['nom'] ?? '');
-        $email   = trim($_POST['email'] ?? '');
-        $message = trim($_POST['message'] ?? '');
-
         if (empty($nom) || empty($email) || empty($message)) {
             $this->flash('Veuillez remplir tous les champs.');
             $this->redirect('/contact');
         }
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $this->flash('Adresse email invalide.');
+            $this->flash('Adresse e-mail invalide.');
+            $this->redirect('/contact');
+        }
+
+        if (mb_strlen($nom) > 100 || mb_strlen($message) > 5000) {
+            $this->flash('Message trop long (5 000 caractères maximum).');
             $this->redirect('/contact');
         }
 
         try {
             (new MailService())->sendContactEmail($nom, $email, $message);
-            $this->flash('Votre message a été envoyé avec succès !');
+            unset($_SESSION['old_input']);
+            $this->flash('Votre message a été envoyé. Nous vous répondrons par e-mail.', 'success');
         } catch (\Exception $e) {
             error_log('Erreur envoi contact : ' . $e->getMessage());
             $this->flash('Erreur lors de l\'envoi. Veuillez réessayer.');
