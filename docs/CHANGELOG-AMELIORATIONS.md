@@ -94,18 +94,26 @@ avec lui, et les nouvelles tables sont simplement ignorées.
 ### Déploiement automatique depuis GitHub (GitHub Actions)
 
 Le workflow `.github/workflows/deploy.yml` lance les tests (PHP 8.2 + MySQL 8) à chaque
-push et pull request. Si les tests passent, il envoie les fichiers modifiés de la
-branche `main` par FTPS. Les dossiers de développement (`tests/`, `dev/`, `docs/`,
-`database/`…) ne sont pas envoyés et `config/config.php` n'est jamais touché.
+push et pull request. Si les tests passent, il envoie les fichiers de la branche `main`
+en **SFTP** (chiffré, port 22) avec `lftp`. Les dossiers de développement (`tests/`,
+`dev/`, `docs/`, `database/`…) ne sont pas envoyés, et `config/config.php` n'est jamais
+touché. Les fichiers supprimés du dépôt ne sont pas supprimés du serveur.
+
+Le serveur FTP d'OVH ne propose pas le FTPS (erreur `500 This security scheme is not
+implemented`). Le FTP simple fonctionne, mais le mot de passe y circule en clair : il
+n'est utilisable qu'en dernier recours, via la variable `FTP_PROTOCOL` = `ftp`.
 
 Mise en place :
-1. GitHub › *Settings › Secrets and variables › Actions › Secrets* : créer `FTP_SERVER`,
+1. OVH › Hébergement › onglet *FTP-SSH* : sur la ligne de l'utilisateur FTP, ouvrir
+   « … › Modifier » et régler la connexion SSH sur **SFTP** (ou « Activé »).
+2. GitHub › *Settings › Secrets and variables › Actions › Secrets* : créer `FTP_SERVER`,
    `FTP_USERNAME`, `FTP_PASSWORD` (Espace client OVH › Hébergement › onglet *FTP-SSH*).
-2. Exécuter la migration SQL en production (étapes 1 à 3 ci-dessus).
-3. Onglet *Variables* : créer `DEPLOY_ENABLED` = `true`. Tant que cette variable n'existe
+   Le même serveur sert au FTP (port 21) et au SFTP (port 22).
+3. Exécuter la migration SQL en production (étapes 1 à 3 ci-dessus).
+4. Onglet *Variables* : créer `DEPLOY_ENABLED` = `true`. Tant que cette variable n'existe
    pas, le workflow ne fait que lancer les tests. Si le site n'est pas dans `www/`,
-   créer aussi `FTP_SERVER_DIR`.
-4. Pousser sur `main`, ou lancer manuellement *Actions › Tests et déploiement › Run workflow*.
+   créer aussi `FTP_SERVER_DIR` (majuscules comprises, avec un `/` final).
+5. Pousser sur `main`, ou lancer manuellement *Actions › Tests et déploiement › Run workflow*.
 
 Pour une migration SQL ultérieure : désactiver `DEPLOY_ENABLED`, migrer, réactiver, puis
 pousser. Les migrations ne sont jamais exécutées automatiquement.

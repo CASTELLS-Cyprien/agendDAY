@@ -1,4 +1,4 @@
-# Tests à chaque push / pull request, puis déploiement FTP vers l'hébergement OVH.
+# Tests à chaque push / pull request, puis déploiement vers l'hébergement OVH.
 #
 # Le déploiement ne s'exécute que si :
 #   - les tests sont au vert ;
@@ -11,9 +11,14 @@
 #   FTP_SERVER   ex. ftp.clusterXXX.hosting.ovh.net (espace client OVH › Hébergement › FTP-SSH)
 #   FTP_USERNAME identifiant FTP principal
 #   FTP_PASSWORD mot de passe FTP
-# Variable facultative : FTP_SERVER_DIR (dossier du site, « www/ » par défaut).
+# Variables facultatives :
+#   FTP_SERVER_DIR dossier du site, « www/ » par défaut
+#   FTP_PROTOCOL   « sftp » par défaut (chiffré, port 22 ; à activer pour l'utilisateur
+#                  dans OVH › FTP-SSH). « ftp » en dernier recours : le serveur FTP
+#                  d'OVH ne propose pas le FTPS, le mot de passe circule alors en clair.
 #
 # config/config.php n'est pas dans le dépôt : il n'est jamais envoyé, modifié ni supprimé.
+# Les fichiers supprimés du dépôt ne sont pas supprimés du serveur (aucune suppression distante).
 
 name: Tests et déploiement
 
@@ -52,7 +57,7 @@ jobs:
       AGENDDAY_TEST_DB_USER: root
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -60,9 +65,9 @@ jobs:
           extensions: pdo_mysql, mbstring, curl
           coverage: none
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Vérification syntaxique PHP
         run: |
@@ -79,34 +84,47 @@ jobs:
         run: php tests/run.php
 
   deploy:
-    name: Déploiement FTP (OVH)
+    name: Déploiement (OVH)
     needs: tests
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: production
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Envoi des fichiers modifiés
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
-          server-dir: ${{ vars.FTP_SERVER_DIR || 'www/' }}
+      - name: Installation de lftp
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+      - name: Envoi des fichiers
+        env:
+          DEPLOY_HOST: ${{ secrets.FTP_SERVER }}
+          DEPLOY_USER: ${{ secrets.FTP_USERNAME }}
+          # Lu par lftp via --env-password : le mot de passe n'apparaît jamais
+          # dans la ligne de commande
+          LFTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          DEPLOY_PROTOCOL: ${{ vars.FTP_PROTOCOL || 'sftp' }}
+          DEPLOY_DIR: ${{ vars.FTP_SERVER_DIR || 'www/' }}
+        run: |
+          case "$DEPLOY_PROTOCOL" in
+            sftp|ftp) ;;
+            *) echo "FTP_PROTOCOL doit valoir « sftp » ou « ftp »." >&2; exit 1 ;;
+          esac
+
           # Fichiers de développement jamais envoyés en production
-          exclude: |
-            **/.git*
-            **/.git*/**
-            .github/**
-            .claude/**
-            tests/**
-            dev/**
-            docs/**
-            database/**
-            storage/**
-            README.md
-            composer.json
-            composer.lock
+          lftp --env-password -u "$DEPLOY_USER" "$DEPLOY_PROTOCOL://$DEPLOY_HOST" <<EOF
+          set cmd:fail-exit yes
+          set net:timeout 30
+          set net:max-retries 3
+          set net:reconnect-interval-base 5
+          set sftp:auto-confirm yes
+          set ftp:ssl-allow no
+          mirror --reverse --no-perms --parallel=4 --verbose=1 \
+            --exclude-glob .git/ --exclude-glob .github/ --exclude-glob .claude/ \
+            --exclude-glob .gitignore --exclude-glob .gitattributes \
+            --exclude-glob tests/ --exclude-glob dev/ --exclude-glob docs/ \
+            --exclude-glob database/ --exclude-glob storage/ \
+            --exclude-glob README.md --exclude-glob composer.json --exclude-glob composer.lock \
+            ./ "$DEPLOY_DIR"
+          bye
+          EOF
