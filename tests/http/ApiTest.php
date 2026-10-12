@@ -53,11 +53,11 @@ $t->test('pages publiques, accès protégés, fichiers internes inaccessibles', 
 
 $t->test('connexion : mot de passe erroné refusé, puis session ouverte', function () use ($ctx) {
     $ctx->a->page('/connexion');
-    $refused = $ctx->a->postWithCsrf('/connexion', ['email' => 'alice@agendday.test', 'motDePasse' => 'mauvais']);
+    $refused = $ctx->a->postWithCsrf('/connexion', ['email' => 'alice@agendday.test', 'motDePasse' => 'faux-' . TestDatabase::password()]);
     Assert::same('/connexion', $refused->header('location'));
     Assert::contains('alice@agendday.test', $ctx->a->page('/connexion')->body, 'E-mail conservé après erreur');
 
-    $ok = $ctx->a->login('alice@agendday.test', TestDatabase::PASSWORD);
+    $ok = $ctx->a->login('alice@agendday.test', TestDatabase::password());
     Assert::same('/calendrier', $ok->header('location'));
 
     $page = $ctx->a->page('/calendrier');
@@ -69,7 +69,7 @@ $t->test('connexion : mot de passe erroné refusé, puis session ouverte', funct
 $t->test('après connexion, retour à la page demandée (lien d\'un e-mail)', function () {
     $client = new HttpClient();
     Assert::same(302, $client->get('/calendrier?date=2026-10-20&event=3')->status);
-    $login = $client->login('alice@agendday.test', TestDatabase::PASSWORD);
+    $login = $client->login('alice@agendday.test', TestDatabase::password());
     Assert::same('/calendrier?date=2026-10-20&event=3', $login->header('location'));
 });
 
@@ -118,7 +118,7 @@ $t->test('création, lecture par période, déplacement et suppression d\'un év
 });
 
 $t->test('isolation : un autre utilisateur ne voit ni ne modifie l\'événement', function () use ($ctx, $day) {
-    $ctx->b->login('bob@agendday.test', TestDatabase::PASSWORD);
+    $ctx->b->login('bob@agendday.test', TestDatabase::password());
 
     Assert::count(0, $ctx->b->get("/api/events?from={$day(0)}&to={$day(30)}")->json()['events']);
     $update = $ctx->b->postWithCsrf('/api/events/update', [
@@ -227,11 +227,11 @@ $t->test('suppression de compte : mot de passe exigé, données effacées', func
     $ctx->b->postWithCsrf('/api/events', ['title' => 'Événement de Bob', 'date' => '2026-12-01', 'time' => '10:00']);
     $ctx->b->page('/parametres');
 
-    $ctx->b->postWithCsrf('/parametres/supprimer-compte', ['password' => 'mauvais', 'confirm' => '1']);
+    $ctx->b->postWithCsrf('/parametres/supprimer-compte', ['password' => 'faux-' . TestDatabase::password(), 'confirm' => '1']);
     Assert::same(1, (int) $ctx->pdo->query('SELECT COUNT(*) FROM users WHERE id = ' . $ctx->bob)->fetchColumn());
 
     $ctx->b->page('/parametres');
-    $deleted = $ctx->b->postWithCsrf('/parametres/supprimer-compte', ['password' => TestDatabase::PASSWORD, 'confirm' => '1']);
+    $deleted = $ctx->b->postWithCsrf('/parametres/supprimer-compte', ['password' => TestDatabase::password(), 'confirm' => '1']);
     Assert::same('/connexion', $deleted->header('location'));
     Assert::same(0, (int) $ctx->pdo->query('SELECT COUNT(*) FROM users WHERE id = ' . $ctx->bob)->fetchColumn());
     Assert::same(0, (int) $ctx->pdo->query('SELECT COUNT(*) FROM events WHERE userID = ' . $ctx->bob)->fetchColumn());

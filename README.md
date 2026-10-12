@@ -72,7 +72,8 @@ php dev/serve.php
 ```
 
 `dev/seed.php` crée la base locale `agendday_dev` avec un compte de démonstration ;
-l'identifiant et le mot de passe sont indiqués dans le fichier. `dev/serve.php` lance
+l'identifiant et le mot de passe (tiré au hasard à chaque exécution) s'affichent dans
+le terminal. `dev/serve.php` lance
 l'application sur http://127.0.0.1:8000. En développement, les e-mails sont écrits dans
 `storage/mail/` au lieu d'être envoyés (`MAIL_TRANSPORT = 'log'`).
 

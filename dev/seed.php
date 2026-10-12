@@ -9,7 +9,9 @@ declare(strict_types=1);
  * Recrée la base locale « agendday_dev » (schéma complet), puis crée un compte
  * de démonstration et des événements autour de la date du jour.
  *
- * Compte de démonstration : DEMO_EMAIL / DEMO_PASSWORD ci-dessous.
+ * Compte de démonstration : DEMO_EMAIL ci-dessous. Le mot de passe est tiré au
+ * hasard à chaque exécution et affiché dans le terminal ; pour le fixer, définir la
+ * variable d'environnement AGENDDAY_DEMO_PASSWORD avant de lancer le script.
  */
 
 require __DIR__ . '/env.php';
@@ -20,8 +22,9 @@ use App\Models\EventModel;
 use App\Services\EventInput;
 use App\Services\ReminderService;
 
-const DEMO_EMAIL    = 'demo@agendday.test';
-const DEMO_PASSWORD = 'demo-agendday-2026';
+const DEMO_EMAIL = 'demo@agendday.test';
+
+$demoPassword = getenv('AGENDDAY_DEMO_PASSWORD') ?: bin2hex(random_bytes(6));
 
 if (!in_array(DB_HOST, ['127.0.0.1', 'localhost', '::1'], true) || !str_ends_with(DB_NAME, '_dev')) {
     fwrite(STDERR, "Refus : ce script ne s'exécute que sur une base locale dont le nom se termine par _dev.\n");
@@ -43,7 +46,7 @@ BaseModel::resetConnection();
 
 $pdo->prepare(
     'INSERT INTO users (nomUtilisateur, email, motDePasse, is_confirmed) VALUES (:name, :email, :hash, 1)'
-)->execute([':name' => 'Camille', ':email' => DEMO_EMAIL, ':hash' => password_hash(DEMO_PASSWORD, PASSWORD_BCRYPT)]);
+)->execute([':name' => 'Camille', ':email' => DEMO_EMAIL, ':hash' => password_hash($demoPassword, PASSWORD_BCRYPT)]);
 $userId = (int) $pdo->lastInsertId();
 
 $now   = new DateTimeImmutable();
@@ -92,4 +95,4 @@ $stats = (new ReminderService())->run($now);
 
 echo 'Base ' . DB_NAME . ' prête : ' . count($events) . ' événements, '
     . $stats['notifications'] . ' notification(s).' . PHP_EOL;
-echo 'Compte de démonstration : ' . DEMO_EMAIL . ' (mot de passe dans dev/seed.php)' . PHP_EOL;
+echo 'Compte de démonstration : ' . DEMO_EMAIL . ' / mot de passe : ' . $demoPassword . PHP_EOL;
