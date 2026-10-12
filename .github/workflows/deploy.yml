@@ -1,0 +1,112 @@
+# Tests à chaque push / pull request, puis déploiement FTP vers l'hébergement OVH.
+#
+# Le déploiement ne s'exécute que si :
+#   - les tests sont au vert ;
+#   - le push concerne la branche main (ou lancement manuel « Run workflow ») ;
+#   - la variable de dépôt DEPLOY_ENABLED vaut « true »
+#     (Settings › Secrets and variables › Actions › Variables).
+#     À activer seulement APRÈS avoir exécuté la migration SQL en production.
+#
+# Secrets requis (Settings › Secrets and variables › Actions › Secrets) :
+#   FTP_SERVER   ex. ftp.clusterXXX.hosting.ovh.net (espace client OVH › Hébergement › FTP-SSH)
+#   FTP_USERNAME identifiant FTP principal
+#   FTP_PASSWORD mot de passe FTP
+# Variable facultative : FTP_SERVER_DIR (dossier du site, « www/ » par défaut).
+#
+# config/config.php n'est pas dans le dépôt : il n'est jamais envoyé, modifié ni supprimé.
+
+name: Tests et déploiement
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: agendday-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    name: Tests (PHP 8.2 + MySQL 8)
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          # Base éphémère propre au job : ce mot de passe n'est pas un secret
+          MYSQL_ROOT_PASSWORD: ci-root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-root"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      AGENDDAY_TEST_DB_HOST: 127.0.0.1
+      AGENDDAY_TEST_DB_USER: root
+      AGENDDAY_TEST_DB_PASS: ci-root
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Vérification syntaxique PHP
+        run: |
+          status=0
+          while IFS= read -r -d '' file; do
+            out=$(php -l "$file" 2>&1) || { echo "$out"; status=1; }
+          done < <(find . -name '*.php' -not -path './vendor/*' -print0)
+          exit $status
+
+      - name: Vérification syntaxique JavaScript
+        run: for file in assets/js/*.js; do node --check "$file"; done
+
+      - name: Suite de tests (unitaires, MySQL, HTTP)
+        run: php tests/run.php
+
+  deploy:
+    name: Déploiement FTP (OVH)
+    needs: tests
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Envoi des fichiers modifiés
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          server-dir: ${{ vars.FTP_SERVER_DIR || 'www/' }}
+          # Fichiers de développement jamais envoyés en production
+          exclude: |
+            **/.git*
+            **/.git*/**
+            .github/**
+            .claude/**
+            tests/**
+            dev/**
+            docs/**
+            database/**
+            storage/**
+            README.md
+            composer.json
+            composer.lock
