@@ -4,16 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="x-ua-compatible" content="ie=edge">
-
     <!-- Applique le thème enregistré avant le premier rendu pour éviter un flash du thème clair -->
-    <script>
-        (function () {
-            try {
-                document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
-            } catch (e) {}
-        })();
-    </script>
+    <script src="<?= $this->asset('/assets/js/theme-init.js') ?>"></script>
 
     <?php
     $baseUrl  = APP_URL;
@@ -99,7 +91,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <link rel="stylesheet" href="<?= $this->asset('/assets/css/global.css') ?>">
@@ -121,13 +113,18 @@
                         <li><a href="#features" class="nav-link">Fonctionnalités</a></li>
                         <li><a href="#about" class="nav-link">À propos</a></li>
                         <li>
-                            <button id="themeToggleHeader" class="theme-toggle-sidebar"
-                                aria-label="Basculer entre thème clair et sombre">
-                                <i class="fas fa-moon"></i>
+                            <button type="button" id="themeToggleHeader" class="theme-toggle-sidebar" data-theme-toggle
+                                aria-label="Activer le thème sombre">
+                                <i class="fas fa-moon" aria-hidden="true"></i>
                             </button>
                         </li>
                         <?php if ($isLoggedIn ?? false): ?>
-                            <li><a href="/deconnexion" class="btn btn-outline nav-cta">Déconnexion</a></li>
+                            <li>
+                                <form method="post" action="/deconnexion">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($this->csrfToken()) ?>">
+                                    <button type="submit" class="btn btn-outline nav-cta">Déconnexion</button>
+                                </form>
+                            </li>
                             <li><a href="/calendrier" class="btn btn-primary nav-cta">Mon calendrier</a></li>
                         <?php else: ?>
                             <li><a href="/connexion" class="btn btn-outline nav-cta">Connexion</a></li>
@@ -135,7 +132,7 @@
                         <?php endif; ?>
                     </ul>
                 </nav>
-                <button class="menu-toggle" aria-label="Ouvrir le menu" aria-expanded="false">
+                <button type="button" class="menu-toggle" aria-label="Ouvrir le menu" aria-expanded="false">
                     <span></span>
                     <span></span>
                     <span></span>

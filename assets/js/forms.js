@@ -1,19 +1,50 @@
 // ===== COMPORTEMENTS COMMUNS AUX FORMULAIRES (connexion, inscription, contact, etc.) =====
 
 document.addEventListener('DOMContentLoaded', () => {
+    // === reCAPTCHA OBLIGATOIRE (formulaire de contact) ===
+    // Complément de la vérification serveur : évite un aller-retour inutile.
+    // Enregistré avant l'état de chargement pour pouvoir annuler l'envoi.
+    document.querySelectorAll('form[data-require-recaptcha]').forEach(form => {
+        form.addEventListener('submit', event => {
+            const response = form.querySelector('[name="g-recaptcha-response"]');
+            const error = document.getElementById('recaptchaError');
+            const missing = !response || !response.value;
+            if (error) {
+                error.hidden = !missing;
+            }
+            if (missing) {
+                event.preventDefault();
+            }
+        });
+    });
+
     // === ÉTAT DE CHARGEMENT DU BOUTON SUBMIT ===
     // Désactive le bouton à la soumission pour éviter les double-clics pendant
     // les traitements qui peuvent prendre plusieurs secondes (envoi SMTP, reCAPTCHA).
+    document.querySelectorAll('.form-submit').forEach(btn => {
+        btn.dataset.originalText = btn.textContent.trim();
+    });
+
     document.querySelectorAll('form').forEach(form => {
-        form.addEventListener('submit', () => {
-            if (!form.checkValidity()) return;
+        form.addEventListener('submit', event => {
+            if (event.defaultPrevented || !form.checkValidity()) return;
 
             const btn = form.querySelector('.form-submit');
             if (btn && !btn.disabled) {
                 btn.disabled = true;
-                btn.dataset.originalText = btn.textContent;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Veuillez patienter…';
+                btn.setAttribute('aria-busy', 'true');
+                btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> Veuillez patienter…';
             }
+        });
+    });
+
+    // Retour arrière depuis le cache du navigateur : le bouton redevient utilisable
+    window.addEventListener('pageshow', event => {
+        if (!event.persisted) return;
+        document.querySelectorAll('.form-submit[aria-busy="true"]').forEach(btn => {
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+            btn.textContent = btn.dataset.originalText || 'Envoyer';
         });
     });
 

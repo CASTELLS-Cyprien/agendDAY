@@ -11,9 +11,12 @@ RewriteCond %{HTTP:X-Forwarded-Proto} !https
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
 # ============================================================
-# SÉCURITÉ — Bloquer accès direct aux répertoires internes
+# SÉCURITÉ — Bloquer accès direct aux répertoires et fichiers internes
 # ============================================================
-RewriteRule ^(app|core|config|vendor)/  - [F,L]
+RewriteRule ^(app|core|config|vendor|database|storage|tests|dev|docs)(/|$) - [F,L]
+RewriteRule ^(bootstrap\.php|composer\.(json|lock)|README\.md)$ - [F,L]
+# Fichiers cachés (.git, .env…), sauf .well-known (validation des certificats)
+RewriteRule (^|/)\.(?!well-known/) - [F,L]
 
 # ============================================================
 # REDIRECTIONS 301 — Anciennes URLs (avant migration MVC)
@@ -55,11 +58,13 @@ RewriteRule ^ index.php [L]
     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
     # Content-Security-Policy — limite les origines autorisées pour les scripts,
-    # styles, polices, images, etc. 'unsafe-inline' reste nécessaire pour les
-    # quelques scripts/styles inline du projet (JSON-LD, validation reCAPTCHA,
-    # notifications injectées en JS) ; les retirer demanderait de migrer vers des
-    # nonces CSP générés par requête.
-    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: https:; connect-src 'self'; frame-src https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+    # styles, polices, images, etc. Aucun script inline n'est exécuté : tout le
+    # JavaScript est dans assets/js (les blocs JSON-LD / application/json ne sont
+    # pas exécutés et ne sont donc pas concernés). 'unsafe-inline' reste autorisé
+    # pour les styles uniquement (styles injectés par le widget reCAPTCHA).
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://www.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: https:; connect-src 'self'; frame-src https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
 
     # X-XSS-Protection est obsolète : ignoré par les navigateurs modernes et a pu
     # introduire des vulnérabilités via le filtre XSS de certains anciens

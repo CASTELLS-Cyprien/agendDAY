@@ -2,8 +2,12 @@
 declare(strict_types=1);
 namespace App\Controllers;
 
+use App\Models\UserModel;
+
 abstract class BaseController
 {
+    private ?array $currentUser = null;
+
     protected function render(string $view, array $data = [], string $layout = 'base'): void
     {
         extract($data, EXTR_SKIP);
@@ -37,13 +41,41 @@ abstract class BaseController
     {
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode($data);
+        // Données personnelles : jamais mises en cache par le navigateur ou un proxy
+        header('Cache-Control: no-store');
+        echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
+    }
+
+    protected function userId(): int
+    {
+        return (int) ($_SESSION['id'] ?? 0);
+    }
+
+    /**
+     * Utilisateur connecté (profil + préférences), chargé une fois par requête.
+     * Si le compte n'existe plus, la session est fermée.
+     */
+    protected function currentUser(): ?array
+    {
+        if ($this->currentUser === null && isset($_SESSION['id'])) {
+            $this->currentUser = (new UserModel())->findById($this->userId());
+            if ($this->currentUser === null) {
+                session_unset();
+            }
+        }
+        return $this->currentUser;
     }
 
     protected function requireAuth(): void
     {
-        if (!isset($_SESSION['id'])) {
+        if (!isset($_SESSION['id']) || $this->currentUser() === null) {
+            // Mémorise la page demandée (ex. lien d'un e-mail de rappel) pour y revenir
+            // après la connexion. Seuls les chemins internes sont acceptés.
+            $target = $_SERVER['REQUEST_URI'] ?? '';
+            if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && self::isInternalPath($target)) {
+                $_SESSION['after_login'] = $target;
+            }
             $this->redirect('/connexion');
         }
     }
@@ -51,7 +83,7 @@ abstract class BaseController
     protected function requireAuthApi(): void
     {
         if (!isset($_SESSION['id'])) {
-            $this->json(['error' => 'Session expirée. Veuillez vous reconnecter.'], 401);
+            $this->json(['error' => 'Session expirée. Veuillez vous reconnecter.', 'code' => 'unauthenticated'], 401);
         }
     }
 
@@ -62,16 +94,48 @@ abstract class BaseController
         }
     }
 
-    protected function flash(string $message): void
+    protected static function isInternalPath(string $path): bool
     {
-        $_SESSION['flash'] = $message;
+        return str_starts_with($path, '/') && !str_starts_with($path, '//') && !str_contains($path, '\\');
     }
 
-    protected function getFlash(): ?string
+    /**
+     * @param string $type 'error' | 'success' | 'info'
+     */
+    protected function flash(string $message, string $type = 'error'): void
     {
-        $message = $_SESSION['flash'] ?? null;
+        $_SESSION['flash'] = ['message' => $message, 'type' => $type];
+    }
+
+    /**
+     * @return array{message: string, type: string}|null
+     */
+    protected function getFlash(): ?array
+    {
+        $flash = $_SESSION['flash'] ?? null;
         unset($_SESSION['flash']);
-        return $message;
+
+        if (is_string($flash)) {
+            // Format antérieur (chaîne seule), possible juste après une mise à jour
+            return ['message' => $flash, 'type' => 'info'];
+        }
+        return is_array($flash) && isset($flash['message']) ? $flash : null;
+    }
+
+    /**
+     * Conserve les valeurs saisies (jamais les mots de passe) pour pré-remplir le
+     * formulaire après une redirection due à une erreur de validation.
+     */
+    protected function rememberInput(array $values): void
+    {
+        $_SESSION['old_input'] = $values;
+    }
+
+    protected function oldInput(): array
+    {
+        $old = $_SESSION['old_input'] ?? [];
+        unset($_SESSION['old_input']);
+        return is_array($old) ? $old : [];
     }
 
     /**
@@ -87,7 +151,7 @@ abstract class BaseController
 
     protected function verifyCsrf(): bool
     {
-        $submitted = $_POST['csrf_token'] ?? '';
+        $submitted = $_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
         return is_string($submitted)
             && $submitted !== ''
             && isset($_SESSION['csrf_token'])
@@ -111,14 +175,13 @@ abstract class BaseController
     protected function requireCsrfApi(): void
     {
         if (!$this->verifyCsrf()) {
-            $this->json(['error' => 'Jeton de sécurité invalide. Veuillez recharger la page.'], 403);
+            $this->json(['error' => 'Jeton de sécurité invalide. Veuillez recharger la page.', 'code' => 'csrf'], 403);
         }
     }
 
     /**
      * Limiteur de tentatives basé sur des fichiers temporaires (pas de table dédiée
-     * nécessaire) — même approche que les verrous utilisés par cron/send_reminders.php.
-     * Retourne false si la limite est dépassée pour la fenêtre de temps donnée.
+     * nécessaire). Retourne false si la limite est dépassée pour la fenêtre de temps donnée.
      */
     protected function rateLimit(string $key, int $maxAttempts, int $windowSeconds): bool
     {
