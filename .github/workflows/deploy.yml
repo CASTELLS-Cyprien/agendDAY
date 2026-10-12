@@ -36,12 +36,13 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          # Base éphémère propre au job : ce mot de passe n'est pas un secret
-          MYSQL_ROOT_PASSWORD: ci-root
+          # Base éphémère, détruite à la fin du job et joignable uniquement depuis
+          # le runner : pas de mot de passe (évite une fausse alerte des scanners)
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-root"
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
@@ -49,7 +50,6 @@ jobs:
     env:
       AGENDDAY_TEST_DB_HOST: 127.0.0.1
       AGENDDAY_TEST_DB_USER: root
-      AGENDDAY_TEST_DB_PASS: ci-root
 
     steps:
       - uses: actions/checkout@v4

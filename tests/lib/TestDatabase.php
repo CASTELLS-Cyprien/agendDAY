@@ -10,7 +10,16 @@ use App\Models\BaseModel;
  */
 final class TestDatabase
 {
-    public const PASSWORD = 'motdepasse-de-test';
+    private static ?string $password = null;
+
+    /**
+     * Mot de passe des comptes de test, tiré au hasard à chaque exécution
+     * (aucune valeur en dur que les scanners de secrets signaleraient).
+     */
+    public static function password(): string
+    {
+        return self::$password ??= bin2hex(random_bytes(12));
+    }
 
     public static function server(): PDO
     {
@@ -85,7 +94,7 @@ final class TestDatabase
         bool $emailReminders = true
     ): int {
         static $hash = null;
-        $hash ??= password_hash(self::PASSWORD, PASSWORD_BCRYPT, ['cost' => 4]);
+        $hash ??= password_hash(self::password(), PASSWORD_BCRYPT, ['cost' => 4]);
 
         $stmt = $pdo->prepare(
             'INSERT INTO users (nomUtilisateur, email, motDePasse, is_confirmed, email_reminders)
